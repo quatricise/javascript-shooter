@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shooter Game</title>
+  <link rel="stylesheet" href="node_modules/normalize.css/normalize.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="modal-main" id='modal-main'>
+    <div class="dialog game-start">
+      <!-- <span>
+        Start game
+      </span> -->
+      <div id="button-start" class="button"  onclick='start()'>START GAME</div>
+    </div>
+    <div class="dialog game-over hidden">
+      <div class="dialog-text">
+        Your score was: <br><span id="score-dialog"></span>
+      </div>
+      <!-- <br> -->
+      <div id="button-restart" class="button" onclick='start()'>RESTART</div>
+    </div>
+  </div>
+  <div class="scorebox">
+    <div class="score">
+      <span>SCORE: </span><span id="score-top">0</span>
+    </div>
+  </div>
+  <div class="ammobox">
+    <div class="ammo">
+      <span>AMMO: </span><span id="ammo-top">0</span>
+    </div>
+  </div>
+  <canvas id="canvas">
+  </canvas>
+  <!-- <script type="module">
+    import gsap from "/node_modules/gsap/all.js";
+  </script> -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.7.1/gsap.min.js"></script>
+
+  <script src="app.js"></script>
+</body>
+</html>

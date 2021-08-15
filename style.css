@@ -1,0 +1,95 @@
+@font-face {
+  font-family: 'arcon';
+  font-display: swap;
+  src: url(fonts/arcon/Arcon-Regular.woff2);
+}
+:root {
+  --modal-background: rgba(255, 255, 255, 0);
+}
+body {
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: 'arcon';
+}
+* {
+  box-sizing: border-box;
+}
+
+.scorebox {
+  position: absolute;
+  padding: 10px;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  user-select: none;
+  pointer-events: none;
+}
+
+.score {
+  color: white;
+}
+.ammobox {
+  position: absolute;
+  padding: 10px;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  user-select: none;
+  pointer-events: none;
+}
+
+.ammo {
+  color: white;
+}
+
+#modal-main {
+  position: fixed;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  justify-items: center;
+  align-content: center;
+  align-items: center;
+
+  background-color: var(--modal-background);
+}
+
+#modal-main .dialog {
+  width: 300px;
+  color: black;
+  text-align: center;
+  background-color: white;
+  padding: 20px 20px;
+  border-radius: 5px;
+  box-shadow: 0px 10px 40px rgba(149, 60, 250, 0.699);
+}
+.button {
+  padding: 5px 10px;
+  border-radius: 20px;
+  user-select: none;
+  cursor: pointer;
+  color: white;
+  background-color: rgb(134, 85, 197);
+  box-shadow: 0px 2px 6px rgba(94, 49, 153, 0.432);
+  transition: box-shadow 0.1s ease-in-out;
+}
+.button:hover {
+  color: white;
+  background-color: rgb(94, 49, 153);
+  box-shadow: 0px 2px 12px rgba(168, 92, 255, 0.699);
+
+
+}
+.hidden {
+  display: none!important;
+}
+
+.dialog-text {
+  margin-bottom: 10px;
+}
+
+#score-dialog {
+  font-size: 40px;
+}
