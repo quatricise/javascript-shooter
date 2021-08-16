@@ -15,7 +15,9 @@ body {
 * {
   box-sizing: border-box;
 }
-
+#canvas {
+  cursor: none;
+}
 .scorebox {
   position: absolute;
   padding: 10px;
@@ -31,18 +33,62 @@ body {
 }
 .ammobox {
   position: absolute;
+  display: flex;
   padding: 10px;
   top: 0;
   right: 0;
-  z-index: 5;
-  user-select: none;
-  pointer-events: none;
+  z-index: 10;
 }
 
 .ammo {
-  color: white;
+  display: flex;
+  justify-content: center;
+  justify-items: center;
+  width: 50px;
+  height: 50px;
+  background-position: center;
+  background-size: contain;
+  cursor: pointer;
 }
 
+.ammo.regular {
+  background-image: url(assets/regular.png);
+}
+.ammo.shrapnel {
+  background-image: url(assets/shrapnel.png);
+}
+.ammo.cannonball {
+  background-image: url(assets/cannonball.png);
+}
+.ammo.explosive {
+  background-image: url(assets/explosive.png);
+}
+.ammo.machine {
+  background-image: url(assets/machine.png);
+}
+
+.ammo.regular.selected {
+  background-image: url(assets/regular_selected.png);
+}
+.ammo.shrapnel.selected {
+  background-image: url(assets/shrapnel_selected.png);
+}
+.ammo.cannonball.selected {
+  background-image: url(assets/cannonball_selected.png);
+}
+.ammo.explosive.selected {
+  background-image: url(assets/explosive_selected.png);
+}
+.ammo.machine.selected {
+  background-image: url(assets/machine_selected.png);
+}
+.ammo-count {
+  position: absolute;
+  bottom: -10px;
+  color: white;
+  user-select: none;
+  pointer-events: none;
+}
 #modal-main {
   position: fixed;
   width: 100vw;
@@ -63,7 +109,7 @@ body {
   background-color: white;
   padding: 20px 20px;
   border-radius: 5px;
-  box-shadow: 0px 10px 40px rgba(149, 60, 250, 0.699);
+  box-shadow: 0px 5px 60px rgba(149, 60, 250, 0.8);
 }
 .button {
   padding: 5px 10px;
@@ -90,6 +136,23 @@ body {
   margin-bottom: 10px;
 }
 
-#score-dialog {
+#score-dialog,#waves-dialog {
   font-size: 40px;
+}
+
+.dummy {
+  color: rgb(56, 39, 218);
+  color: rgb(223, 43, 97);
+}
+
+.overlay-main {
+  position: absolute;
+  width: 100vw;
+  height: 100vh;
+  user-select: none;
+  pointer-events: none;
+}
+
+.info-blip {
+  color: white;
 }

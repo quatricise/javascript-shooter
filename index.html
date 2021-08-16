@@ -19,6 +19,8 @@
     <div class="dialog game-over hidden">
       <div class="dialog-text">
         Your score was: <br><span id="score-dialog"></span>
+        <br>
+        Waves survived: <br><span id="waves-dialog"></span>
       </div>
       <!-- <br> -->
       <div id="button-restart" class="button" onclick='start()'>RESTART</div>
@@ -30,10 +32,23 @@
     </div>
   </div>
   <div class="ammobox">
-    <div class="ammo">
-      <span>AMMO: </span><span id="ammo-top">0</span>
+    <div class="ammo regular" onclick="switchAmmo('regular')">
+      <span class="ammo-count regular" id="ammo-regular">0</span>
+    </div>
+    <div class="ammo shrapnel" onclick="switchAmmo('shrapnel')">
+      <span class="ammo-count shrapnel" id="ammo-shrapnel">0</span>
+    </div>
+    <div class="ammo cannonball" onclick="switchAmmo('cannonball')">
+      <span class="ammo-count cannonball" id="ammo-cannonball">0</span>
+    </div>
+    <div class="ammo explosive" onclick="switchAmmo('explosive')">
+      <span class="ammo-count explosive" id="ammo-explosive">0</span>
+    </div>
+    <div class="ammo machine" onclick="switchAmmo('machine')">
+      <span class="ammo-count machine" id="ammo-machine">0</span>
     </div>
   </div>
+  <div class="overlay-main"></div>
   <canvas id="canvas">
   </canvas>
   <!-- <script type="module">
