@@ -10,6 +10,7 @@ let dispAmmoRegular = document.querySelector('#ammo-regular')
 let dispAmmoShrapnel = document.querySelector('#ammo-shrapnel')
 let dispAmmoCannonball = document.querySelector('#ammo-cannonball')
 let dispAmmoExplosive = document.querySelector('#ammo-explosive')
+let dispAmmoMachine = document.querySelector('#ammo-machine')
 
 let ammoSpriteRegular = document.querySelector('.ammo.regular')
 let ammoSpriteShrapnel = document.querySelector('.ammo.shrapnel')
@@ -22,11 +23,17 @@ let overlaysInfo = [];
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 
+let CW = canvas.width //idea replace the lenghty canvas.width with cw
+let CH = canvas.height
+let drawId = null;
+
 window.onresize = function() {
   canvas.width = window.innerWidth
   canvas.height = window.innerHeight
+  centerX = canvas.width/2;
+  centerY = canvas.height/2;
 }
-
+let energy = 100; //newidea //this could be used for the jumps, they consume energy, which has to be recovered
 let pressedShift = false;
 let pressedCtrl = false;
 
@@ -40,8 +47,10 @@ let dodgeOrigin = null;
 let dodgeWindow;
 let windup = 0;
 let dodgePosVisible = false;
+
 // timers
 let enemySpawnTimer;
+let machineTimer;
 
 let gameover = false;
 let score = 0;
@@ -50,9 +59,14 @@ let ammoShrapnel = 0
 let ammoCannonball = 0
 let ammoExplosive = 0
 let ammoMachine = 0
+let ammoTotal = 0;
 let currentAmmoType = 'shrapnel';
 let enemyCap = 12;
 let minRadToKill = 20
+let minRadToBurn = 13
+let velInhibBase = 1
+let burnDamage = 5
+let leaderChanceMult = 1
 let reachedEnemyCap = false;
 let waveNumber = 1;
 let waveActive = false;
@@ -145,8 +159,13 @@ class Projectile {
       this.bounced = false;
       this.power = 1.5
       this.type = type;
+      this.damage = 8
+      this.damageFalloff = {
+        distance: 200,
+        amount: 1,
+      }
     }
-    if(type == 'shrapnel') { // problematic, the projectiles aren't visible
+    if(type == 'shrapnel') {
       this.x = x;
       this.y = y;
       this.radius = radius * shrapnelRadiusMult;
@@ -158,21 +177,51 @@ class Projectile {
       this.bounces = 0;
       this.bounced = false;
       this.power = 2
+      this.damage = 100
       this.type = type;
     }
-    if(type == 'cannonball') { // problematic, the projectiles aren't visible
+    if(type == 'cannonball') {
       this.x = x;
       this.y = y;
       this.radius = radius * cannonballRadiusMult;
       this.color = color;
       this.velocity = {
-        x: velocity.x *0.5,
-        y: velocity.y *0.5,
+        x: velocity.x *0.7,
+        y: velocity.y *0.7,
       };
       this.bounces = 0;
       this.bounced = false;
       this.life = 4;
       this.power = 5
+      this.type = type;
+    }
+    if(type == 'explosive') {
+      this.x = x;
+      this.y = y;
+      this.radius = radius * explosiveRadiusMult;
+      this.color = color;
+      this.velocity = {
+        x: velocity.x *0.8,
+        y: velocity.y *0.8,
+      };
+      this.bounces = 0;
+      this.bounced = false;
+      this.power = 6
+      this.type = type;
+    }
+    if(type == 'machine') {
+      this.x = x;
+      this.y = y;
+      this.radius = radius;
+      this.color = color;
+      this.velocity = {
+        x: velocity.x *1.2,
+        y: velocity.y *1.2,
+      };
+      this.bounces = 0;
+      this.bounced = false;
+      this.power = 1
+      this.damage = 6
       this.type = type;
     }
   }
@@ -191,15 +240,16 @@ class Projectile {
 }
 
 class Enemy {
-  constructor(x,y,radius,color,velocity) {
+  constructor(x,y,radius,color,velocity,velInhibition) {
     this.x = x
     this.y = y
     this.radius = radius
     this.color = color
     this.velocity = velocity
-    this.velInhibition = 1
+    this.velInhibition = velInhibition
     this.destroy = false;
     this.dead = false;
+    this.exploded = false;
     this.target = 'player';
     this.changingTarget = false;
 
@@ -221,7 +271,7 @@ class Enemy {
     // if player is the closest
     if(distPlayer < distBase) {
       this.target = 'player'
-      if(playerMoved) {  // this might break at some point, since this is only run when player is closer to the enemy, but not when the base is //issue
+      if(playerMoved) { //issue // this might break at some point, since this is only run when player is closer to the enemy, but not when the base is closer 
         setTimeout(()=>{
           var angle = Math.atan2( player.y - this.y, player.x - this.x);
           gsap.fromTo(this.velocity,{x: this.velocity.x,y: this.velocity.y},{x: Math.cos(angle)*enemySpeed, y: Math.sin(angle)*enemySpeed, duration: 1})
@@ -237,13 +287,13 @@ class Enemy {
         
       },150)
     }
-    this.x += this.velocity.x / this.velInhibition
-    this.y += this.velocity.y / this.velInhibition
+    this.x += this.velocity.x / Math.max(this.velInhibition, 1)
+    this.y += this.velocity.y / Math.max(this.velInhibition, 1)
 
     if(this.velInhibition > 1.02) { // -0.5 * 0.02 => 
      var decrease = (1 - this.velInhibition) * 0.01 // the smaller the last number, the slower the return to 1
      this.velInhibition += decrease
-    //  console.log(this.velInhibition)
+    
     } 
     else if(this.velInhibition > 1 && this.velInhibition < 1.02) {
       this.velInhibition = 1;
@@ -253,15 +303,32 @@ class Enemy {
   }
 }
 class Leader extends Enemy {
-  constructor(x,y,radius,color,velocity,velInhibition,destroy,dead,target,changingTarget) {
-    super(x,y,radius,color,velocity,velInhibition,destroy,dead,target,changingTarget)
+  constructor(x,y,radius,color,velocity, velInhibition) {
+    super(x,y,radius,color,velocity, velInhibition);
+    this.x = x
+    this.y = y
     this.radius = radius * 1.5 + 10
+    this.color = color
+    this.velocity = velocity
+    this.velInhibition = velInhibition / 2
     this.leader = true;
   }
 }
 
 class Particle {
   constructor(x,y,radius,color,velocity,origin,type) {
+    if(type == 'particle') {
+      this.x = x
+      this.y = y
+      this.radius = radius
+      this.color = color
+      this.velocity = velocity
+      this.alpha = 100
+      this.origin = origin
+      this.bounces = 3
+      this.bounced = false
+      this.type = type
+    }
     if(type == 'shrapnel') {
       this.x = x
       this.y = y
@@ -274,18 +341,17 @@ class Particle {
       this.bounced = false
       this.type = type
     }
-    if(type == 'particle') {
+    if(type == 'explosive') {
       this.x = x
       this.y = y
       this.radius = radius
       this.color = color
       this.velocity = velocity
-      this.alpha = 100
+      this.alpha = 300
       this.origin = origin
-      this.bounces = 3
+      this.bounces = 0
       this.bounced = false
       this.type = type
-
     }
   }
   draw() {
@@ -304,9 +370,34 @@ class Particle {
     this.velocity.y *= friction;
     this.x += this.velocity.x
     this.y += this.velocity.y
-    if(this.type == 'particle') {
+    if(this.type == 'particle' || this.type == 'explosive') {
       this.alpha -= 1;
     }
+  }
+}
+
+class Explosion {
+  constructor(x,y,radius,color) {
+    this.x = x 
+    this.y = y 
+    this.radius = radius 
+    this.color = color
+    this.lifeinit = 20
+    this.life = this.lifeinit
+  }
+  draw() {
+    ctx.save()
+    ctx.globalAlpha = this.life / this.lifeinit
+    ctx.beginPath()
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2, false)
+    ctx.fillStyle = this.color
+    ctx.fill();
+    ctx.closePath();
+    ctx.restore()
+  }
+  update() {
+    this.draw()
+    this.life--
   }
 }
 
@@ -335,7 +426,7 @@ class Info {
     this.x = x
     this.y = y
     this.text = text
-    this.life = 100
+    this.life = 75
     this.dead = false;
 
     this.visual = document.createElement('div')
@@ -349,7 +440,7 @@ class Info {
   }
   update() {
     this.life--
-    this.visual.style.filter = `opacity(${this.life/100})`
+    if(this.life <= 50) this.visual.style.filter = `opacity(${this.life/50})`
     // console.log(this.visual.style.filter)
     if(this.life <= 0) {
       this.visual.remove()
@@ -361,7 +452,7 @@ class Info {
 function spawnEnemy() {
     if(reachedEnemyCap) return;
 
-    var radius = Math.random() * (enemyRadius - 15) + 15;
+    var radius = Math.random() * (enemyRadius - 20) + 20; //randomize enemy sizes
     var x = 0;
     var y = 0;
     var switchXY = Math.round(Math.random());
@@ -380,12 +471,14 @@ function spawnEnemy() {
       y: Math.sin(angle)*enemySpeed,
     }
 
-    var leaderchance = Math.random() * 10
-    if(leaderchance > 9) {
+    var leaderchance = Math.random() * 15 * leaderChanceMult
+    leaderChanceMult += 0.05
+    if(leaderchance > 14) {
       color = getColor('leader')
-      enemies.push(new Leader(x, y, radius, color, velocity));
+      enemies.push(new Leader(x, y, radius, color, velocity, velInhibBase));
+      leaderChanceMult = 1
     } else {
-      enemies.push(new Enemy(x, y, radius, color, velocity));
+      enemies.push(new Enemy(x, y, radius, color, velocity, velInhibBase));
     }
   
 }
@@ -396,9 +489,20 @@ function init() {
   waveActive = true;
   waveNumber = 1;
   score = 0;
+  // regular amounts
   ammoRegular = 30
   ammoShrapnel = 3
   ammoCannonball = 2
+  ammoExplosive = 0
+  ammoMachine = 0
+  // playtesting amounts
+  ammoRegular = 100
+  ammoShrapnel = 100
+  ammoCannonball = 100
+  ammoExplosive = 100
+  ammoMachine = 100
+
+  ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
   player.x = centerX
   player.y = centerY
   ctx.fillStyle = '#000'
@@ -427,7 +531,8 @@ let mouseX;
 let mouseY;
 
 let dodgeDistance = 300
-
+let maxDodge = 500
+let minDodge = 60
 let cursorRadius = 10;
 let playerMoved = false;
 let dodgeSpeed = 0.1;
@@ -440,17 +545,22 @@ let baseRadius = 80;
 const projectiles = [];
 const enemies = [];
 const particles = [];
+const explosions = [];
 
 let projRadius = 7;
-let projectileSpeed = 7;
+let projectileSpeed = 9;
 let shrapnelRadiusMult = 1.5;
 let cannonballRadiusMult = 4;
+let explosiveRadiusMult = 2.5;
 let enemyRadius = 40;
 let enemySpeed = 1;
 let particleRadius = 3;
 let particleVariance = 3;
 let particleSpeed = 4;
 let friction = 0.999;
+
+let explosionColor = 'orange';
+let explosionRadius = 220;
 
 const player = new Player(centerX, centerY, 20, 'white', {x: dodgeDistance, y: dodgeDistance})
 const mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHealth)
@@ -464,7 +574,7 @@ canvas.addEventListener('mousemove', function(e) {
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
 
 function processWheelEvents(e) {
-  console.log(e.deltaY)
+  // console.log(e.deltaY)
   if(pressedShift) {
     resizeDodge(e)
   } else {
@@ -477,7 +587,15 @@ function processWheelEvents(e) {
 }
 function resizeDodge(e) {
   var resize = e.deltaY / 5
-  dodgeDistance -= resize;
+  if(dodgeDistance <= maxDodge && dodgeDistance >= minDodge) {
+    dodgeDistance -= resize;
+    if(dodgeDistance >= maxDodge) {
+      dodgeDistance = maxDodge
+    } else if(dodgeDistance <= minDodge) {
+      dodgeDistance = minDodge
+    }
+  
+  } else return;
 
   if(!dodgeResizing) {
     dodgeResizing = true
@@ -492,10 +610,32 @@ function resizeDodge(e) {
     onComplete: ()=> {dodgeResizing = false}
   })
 }
-canvas.addEventListener('click', fire)
+// canvas.addEventListener('click', fire)
+
+canvas.addEventListener('mousedown', fire)
+canvas.addEventListener('mouseup', function() {
+  clearInterval(machineTimer);
+})
+
+function autoFire() {
+  if(currentAmmoType == 'machine' && ammoMachine > 0) {
+    machineTimer = setInterval(()=>{
+      spawnProjectile({clientX: mouseX,clientY: mouseY})
+      if(ammoMachine <= 0) {
+        clearInterval(machineTimer);
+        return;
+      }
+      ammoMachine--
+      updateAmmoVisual();
+
+    },100)
+  }
+}
 
 function fire(e) {
   if(gameover) return;
+  if(ammoTotal < 1) return;
+  calcAmmoTotal()
 
   if(currentAmmoType == 'regular' && ammoRegular > 0) {
     ammoRegular--
@@ -513,6 +653,9 @@ function fire(e) {
     ammoExplosive--
     spawnProjectile(e)
   }
+  if(currentAmmoType == 'machine' && ammoMachine > 0) {
+    autoFire()
+  }
   // spawnProjectile(e)
   updateAmmoVisual();
 
@@ -523,7 +666,7 @@ function spawnProjectile(e) {
     x: Math.cos(angle) * projectileSpeed,
     y: Math.sin(angle) * projectileSpeed,
   }
-  projectiles.push(new Projectile(player.x, player.y, projRadius, 'lightblue', velocity, currentAmmoType ))
+  projectiles.push(new Projectile(player.x, player.y, projRadius, getProjectileColor(), velocity, currentAmmoType ))
 }
 
 function drawBackground() {
@@ -541,27 +684,41 @@ function drawCursor() {
   ctx.stroke()
   ctx.closePath();
 }
+
 // main draw function
-let drawId = null;
 function draw() {
-  // ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   drawBackground();
   mainbase.update();
   projectiles.forEach((projectile, indexProj)=> {
     projectile.update()
 
     // ricochet projectile off walls if bounces > 0
-    if( ((projectile.x > (canvas.width - projRadius) || projectile.x < (0 + projRadius)) || 
-        (projectile.y > (canvas.height - projRadius) || projectile.y < (0 + projRadius))) &&
+
+    // left and right wall
+    if(
+        (projectile.x > (canvas.width - projRadius) || projectile.x < (0 + projRadius)) &&
         projectile.bounces > 0
       ) {
-        console.log('projectile bounces: ' + projectile.bounces)
       projectile.bounced = true
       projectile.bounces -= 1
       projectile.velocity.x *= -1
-      projectile.velocity.y *= -1
-      setTimeout(()=>{projectile.bounced = false},100)
+      // projectile.velocity.y *= -1
+      setTimeout(()=>{projectile.bounced = false},50)
     }
+
+    // top and bottom wall
+    if(  
+        (projectile.y > (canvas.height - projRadius) || projectile.y < (0 + projRadius)) &&
+        projectile.bounces > 0
+      ) {
+      projectile.bounced = true
+      projectile.bounces -= 1
+      // projectile.velocity.x *= -1
+      projectile.velocity.y *= -1
+      setTimeout(()=>{projectile.bounced = false},50)
+    }
+
     // destroy projectile if it went off the canvas
     else if( (projectile.x > (canvas.width + projRadius*2 ) || projectile.x < (0 - projRadius*2)) || (projectile.y > (canvas.height + projRadius*2) || projectile.y < (0 - projRadius*2)) ) {
       setTimeout(()=> {
@@ -575,12 +732,22 @@ function draw() {
 
     //automatic cleanup of enemies with radius <=1
     if(enemy.radius <= 1) enemies.splice(indexEnemy,1);
+
+    //automatic cleanup of enemies which are very small and were burned by an explosion
+    if(enemy.exploded == true && enemy.radius < minRadToBurn) {
+      enemy.dead = true;
+      gsap.to(enemy,{radius: 1, duration: enemy.radius/8 , onComplete: () => {
+        enemies.forEach((en, ind) => {
+          if(en.dead == true) enemies.splice(ind,1)
+      })}})
+    }
+
     // avoid running any more code on dead enemies, they will be removed automatically
     if(enemy.dead == true) return;
-    const distance = Math.hypot(player.x - enemy.x,player.y - enemy.y)
+    let distance = Math.hypot(player.x - enemy.x,player.y - enemy.y)
     
     // when player is touched by an enemy
-    if(distance - player.radius - enemy.radius < 0) {
+    if(distance - player.radius - enemy.radius < 0 && enemy.dead == false) {
       if(player.invulnerable == false) {
 
         endGame();
@@ -590,14 +757,15 @@ function draw() {
     if( (enemy.x > (canvas.width + enemyRadius*2 ) || enemy.x < (0 - enemyRadius*2)) || (enemy.y > (canvas.height + enemyRadius*2) || enemy.y < (0 - enemyRadius*2)) ) {
       enemies.splice(indexEnemy, 1);
     }
-
+    
+    // projectile logic for each enemy in enemies
     projectiles.forEach((projectile, indexProj) => {
 
 
-      const distance = Math.hypot(projectile.x - enemy.x,projectile.y - enemy.y) // draws a right-angle triangle and calculates the distance between two points
+      let distance = Math.hypot(projectile.x - enemy.x,projectile.y - enemy.y)
       
       // when projectile hits an enemy
-      if(distance - enemy.radius - projectile.radius < -2) {
+      if(distance - enemy.radius - projectile.radius < -1) {
         
         if(Math.random()*9 > 5) {
           gainAmmo('regular')
@@ -608,7 +776,7 @@ function draw() {
         // calculate enemy slowdown
         enemy.velInhibition *= projectile.power
 
-        // spawn regular particles
+        // spawn particles for regular
         if (projectile.type == 'regular') {
           for (let i = 0; i < enemy.radius/3; i++) {
             particles.push(new Particle(
@@ -623,11 +791,11 @@ function draw() {
               enemy,
               'particle'
               ))
-            }
           }
+        }
           
-          // spawn shrapnel + regular particles
-          if (projectile.type == 'shrapnel') {
+        // spawn particles for shrapnel
+        if (projectile.type == 'shrapnel') {
 
           for (let i = 0; i < enemy.radius/6; i++) {
             particles.push(new Particle(
@@ -635,78 +803,146 @@ function draw() {
               (projectile.y + (Math.random()*20 - 10)), 
               (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
               enemy.color, 
+              { 
+                x: Math.random()*10 - 5 , 
+                y: Math.random()*10 - 5 ,
+              },
+              enemy,
+          'particle'
+          ))
+        }
+
+          
+        for (let i = 0; i < enemy.radius/3; i++) {
+          particles.push(new Particle(
+            (projectile.x + (Math.random()*20 - 10)), 
+            (projectile.y + (Math.random()*20 - 10)), 
+            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+            enemy.color, 
+          { 
+            x: (Math.random()*2 - 1) + projectile.velocity.x, 
+            y: (Math.random()*2 - 1) + projectile.velocity.y,
+          },
+          enemy,
+          'shrapnel'
+          ))
+        }
+      }
+      
+      // spawn particles for cannonball
+      if (projectile.type == 'cannonball') {
+        for (let i = 0; i < enemy.radius/8; i++) {
+          particles.push(new Particle(
+            (projectile.x + (Math.random()*20 - 10)), 
+            (projectile.y + (Math.random()*20 - 10)), 
+            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+            enemy.color, 
             { 
-              x: Math.random()*10 - 5 , 
-              y: Math.random()*10 - 5 ,
+              x: Math.random()*8 - 4 , 
+              y: Math.random()*8 - 4 ,
             },
             enemy,
             'particle'
             ))
-          }
-          for (let i = 0; i < enemy.radius/3; i++) {
-            particles.push(new Particle(
-              (projectile.x + (Math.random()*20 - 10)), 
-              (projectile.y + (Math.random()*20 - 10)), 
-              (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-              enemy.color, 
+        }
+      }
+
+      // spawn particles for explosive
+      if (projectile.type == 'explosive') {
+        for (let i = 0; i < enemy.radius/5; i++) {
+          particles.push(new Particle(
+            (projectile.x + (Math.random()*20 - 10)), 
+            (projectile.y + (Math.random()*20 - 10)), 
+            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+            explosionColor, 
             { 
-              x: (Math.random()*2 - 1) + projectile.velocity.x, 
-              y: (Math.random()*2 - 1) + projectile.velocity.y,
+              x: Math.random()*6 - 3 , 
+              y: Math.random()*6 - 3 ,
             },
             enemy,
-            'shrapnel'
+            'explosive'
             ))
-          }
         }
+      }
         
         
 
-        // shrink enemy on hit by 'regular'
-        if (enemy.radius > minRadToKill && projectile.type == 'regular') {
-          gsap.to(enemy, {radius: enemy.radius - 10})
-          setTimeout(()=> {
-            projectiles.splice(indexProj, 1);
-          },0)
-          updateScore('shrink-enemy')
-        } 
+      // shrink enemy on hit by regular
+      if (enemy.radius > minRadToKill && projectile.type == 'regular') {
+        gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
+        setTimeout(()=> {
+          projectiles.splice(indexProj, 1);
+        },0)
+        updateScore('shrink-enemy')
+      } 
 
-        // kill enemy by cannonball
-        if (projectile.type == 'cannonball') {
-          gsap.to(enemy, {radius: 1})
-          projectile.life--
-          if(projectile.life < 1) {
-            setTimeout(()=> {
-              projectiles.splice(indexProj, 1);
-            },0)
-          }
-          enemy.dead = true;
-          console.log(enemy)
-          updateScore('kill-enemy')
-        } 
-        // kill the enemy hit by shrapnel projectile
-        if(projectile.type == 'shrapnel') {
+      // hit by cannonball
+      if (projectile.type == 'cannonball') {
+        gsap.to(enemy, {radius: 1, duration: 0.3})
+        projectile.life--
+        projectile.velocity.x *= 1 - (enemy.radius/200 + 0.05)
+        projectile.velocity.y *= 1 - (enemy.radius/200 + 0.05)
+        if(projectile.life < 1) {
           setTimeout(()=> {
-            enemies.splice(indexEnemy, 1);
             projectiles.splice(indexProj, 1);
           },0)
-          updateScore('kill-enemy')
-          enemy.dead = true;
         }
+        enemy.dead = true;
+        // console.log(enemy)
+        updateScore('kill-enemy')
+      } 
+      // hit by shrapnel
+      if(projectile.type == 'shrapnel') {
+        setTimeout(()=> {
+          enemies.splice(indexEnemy, 1);
+          projectiles.splice(indexProj, 1);
+        },0)
+        updateScore('kill-enemy')
+        enemy.dead = true;
+      }
+
+      // hit by explosive
+      if(projectile.type == 'explosive') {
+        setTimeout(()=> {
+          projectiles.splice(indexProj, 1);
+        },0)
+        explosions.push(new Explosion(enemy.x,enemy.y,explosionRadius, explosionColor))
+        //issue //need a way to calculate score here
+        // enemy.dead = true;
+        gsap.to(enemy,{color: explosionColor, duration: 1})
+      }
+      // hit by machine
+      if(projectile.type == 'machine') {
+        gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
+        setTimeout(()=> {
+          projectiles.splice(indexProj, 1);
+        },0)
         
-        // kill enemy if it's less than the minimum radius required to kill an enemy, but use GSAP, because gsap == fancy++
-        if(enemy.radius < minRadToKill) {
-          enemy.dead = true;
-          gsap.to(enemy,{radius: 1, onComplete: () => {
-            enemies.forEach((en, ind) => {
-              if(en.dead == true) enemies.splice(ind,1)
-          })}})
-          setTimeout(()=> {
-            // enemies.splice(indexEnemy, 1);
-            projectiles.splice(indexProj, 1);
-          },0)
-          updateScore('kill-enemy')
-        }
 
+        
+      }
+      
+      // kill enemy if it's less than the minimum radius required to kill an enemy
+      if(enemy.radius < minRadToKill) {
+        //mark this enemy as dead to prevent accidentally deleting a different enemy while gsap.to() finishes
+        enemy.dead = true;
+        gsap.to(enemy,{radius: 1, onComplete: () => {
+          enemies.forEach((en, ind) => {
+            if(en.dead == true) enemies.splice(ind,1)
+        })}})
+        setTimeout(()=> {
+          // enemies.splice(indexEnemy, 1);
+          projectiles.splice(indexProj, 1);
+        },0)
+        updateScore('kill-enemy')
+      }
+      // kill all enemies => enemy.dead == true
+      if(enemy.dead == true) {
+        gsap.to(enemy,{radius: 1, duration: enemy.radius/30 , onComplete: () => {
+          enemies.forEach((en, ind) => {
+            if(en.dead == true) enemies.splice(ind,1)
+        })}})
+      }
       }
     })
     
@@ -747,7 +983,7 @@ function draw() {
           
           //decrease the enemy radius upon hit by shrapnel particle
           enemy.destroy = true;
-          console.log(enemy)
+          // console.log(enemy)
           gsap.to(enemy, {radius: enemy.radius - 5, duration: 0.1, onComplete:()=> {
             if(enemy.radius <= 10) {
               gsap.to(enemy, {radius: 1, duration: 0.1, onComplete:()=> {
@@ -773,7 +1009,7 @@ function draw() {
   // update and delete particles with alpha <= 0
   particles.forEach((particle, index) => {
     particle.update();
-    if(particle.alpha < 1) {
+    if(particle.alpha <= 0) {
       particles.splice(index,1)
     }
   })
@@ -785,6 +1021,43 @@ function draw() {
     reachedEnemyCap = false;
 
   }
+
+
+  //explosions mechanic
+  explosions.forEach((explosion, explIndex)=>{
+    explosion.update()
+    if(explosion.life <= 0) {
+      explosions.splice(explIndex,1)
+    }
+    enemies.forEach((enemy,enemyIndex) => {
+
+      // check for enemies in radius of the explosion
+      let distance = Math.hypot(explosion.x - (enemy.x - enemy.radius),explosion.y - (enemy.y - enemy.radius))
+      let damageFalloff = distance/(explosion.radius/3) // min = ~0 max = 3
+      // if enemy is in the radius
+      if(distance <= explosion.radius) {
+        //add 1 particle each frame
+        particles.push(new Particle(
+          (enemy.x + (Math.random()*20 - 10)), 
+          (enemy.y + (Math.random()*20 - 10)), 
+          (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+          explosionColor, 
+          { 
+            x: Math.random()*4 - 2 , 
+            y: Math.random()*4 - 2 ,
+          },
+          enemy,
+          'particle'
+          ))
+        enemy.exploded = true;
+        enemy.velInhibition *= 1.02
+        gsap.to(enemy, {radius: enemy.radius - (burnDamage - damageFalloff), duration: 0.12}) // radius reduction 5-2/second
+        gsap.to(enemy, {color: explosionColor, duration: 0.4})
+        
+      }
+    })
+  })
+
 
   //player mechanics
   player.update();
@@ -839,6 +1112,13 @@ function getColor(arg) {
     return 'rgb(223, 43, 97)'
   }
 }
+function getProjectileColor() {
+  if (currentAmmoType == 'regular') return 'lightblue'
+  if (currentAmmoType == 'shrapnel') return 'hsl(0,0%,65%)'
+  if (currentAmmoType == 'cannonball') return 'hsl(0,0%,45%)'
+  if (currentAmmoType == 'explosive') return 'orange'
+  if (currentAmmoType == 'machine') return 'hsl(234,10%,80%)'
+}
 
 function calcHypotenuse(a, b) {
   return (Math.sqrt((a * a) + (b * b)));
@@ -846,9 +1126,11 @@ function calcHypotenuse(a, b) {
 
 function start() {
   init()
+  // bgMusic.play()
 }
 function endGame() {
   gameover = true;
+  clearInterval(machineTimer);
   openModal('gameover')
 }
 
@@ -992,7 +1274,7 @@ function dodgeFinish() {
 
 function displayDodgePositions() {
   dodgePosVisible = true;
-  if(windup < 42) windup += 6
+  if(windup < 40) windup += 8
   ctx.save()
   ctx.globalAlpha = windup / 100
   ctx.strokeStyle = player.color
@@ -1121,9 +1403,12 @@ function gainAmmo(type) {
   if(type == 'regular') {
     ammoRegular++
   }
+  calcAmmoTotal()
   updateAmmoVisual();
 }
-
+function calcAmmoTotal() {
+  ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
+}
 //UI functionality
 function updateScoreVisual() {
   scoreTop.innerHTML = score;
@@ -1154,6 +1439,7 @@ function updateAmmoVisual() {
   dispAmmoShrapnel.innerHTML = ammoShrapnel;
   dispAmmoCannonball.innerHTML = ammoCannonball;
   dispAmmoExplosive.innerHTML = ammoExplosive;
+  dispAmmoMachine.innerHTML = ammoMachine;
 }
 function switchAmmo(arg) {
   currentAmmoType = arg;
@@ -1212,7 +1498,7 @@ function openModal(arg) {
       dialogGameover.classList.remove('hidden')
       dialogStart.classList.add('hidden')
       scoreDialog.innerHTML = score;
-      wavesDialog.innerHTML = waveNumber;
+      wavesDialog.innerHTML = waveNumber - 1;
       break
     }
   }
@@ -1274,3 +1560,24 @@ function endWave() {
   waveActive = false;
   waveNumber++
 }
+
+
+
+
+
+
+
+// audio
+
+//issue // gotta make the audiocontext work
+
+// var ctxa = new AudioContext();
+
+// var amp = ctxa.createGain()
+
+var sfxLaser = new Audio();
+sfxLaser.src = 'audio/laser.wav'
+// sfxLaser.onload = console.log(sfxLaser.duration)
+var bgMusic = new Audio();
+bgMusic.src = 'audio/music.wav'
+bgMusic.loop = true;

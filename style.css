@@ -112,7 +112,7 @@ body {
   box-shadow: 0px 5px 60px rgba(149, 60, 250, 0.8);
 }
 .button {
-  padding: 5px 10px;
+  padding: 10px 10px;
   border-radius: 20px;
   user-select: none;
   cursor: pointer;
@@ -155,4 +155,8 @@ body {
 
 .info-blip {
   color: white;
+  background-color: black;
+  padding: 5px 10px;
+  border-radius: 15px;
+  box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.795);
 }
