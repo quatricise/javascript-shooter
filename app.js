@@ -1,11 +1,25 @@
 const canvas = document.querySelector('#canvas');
 const ctx = canvas.getContext("2d");
+
 let modal = document.querySelector('#modal-main')
 let dialogGameover = document.querySelector('.dialog.game-over')
 let dialogStart = document.querySelector('.dialog.game-start')
+
 let scoreTop = document.querySelector('#score-top')
 let scoreDialog = document.querySelector('#score-dialog')
 let wavesDialog = document.querySelector('#waves-dialog')
+
+let mapContainer = document.querySelector('#map-container')
+let arrowContainer = document.querySelector('#arrow-container')
+let dialogContainer = document.querySelector('#dialog-container')
+
+let sectorMap = document.querySelector('#sector-map')
+
+let arrows = Array.from(document.querySelectorAll('.arrow'))
+arrows[0].direction = 'left'
+arrows[1].direction = 'right'
+arrows[2].direction = 'up'
+arrows[3].direction = 'down'
 let dispAmmoRegular = document.querySelector('#ammo-regular')
 let dispAmmoShrapnel = document.querySelector('#ammo-shrapnel')
 let dispAmmoCannonball = document.querySelector('#ammo-cannonball')
@@ -23,8 +37,11 @@ let overlaysInfo = [];
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 
-let CW = canvas.width //idea replace the lenghty canvas.width with cw
-let CH = canvas.height
+let dialogs = []
+
+
+let cw = canvas.width //idea replace the lenghty canvas.width with cw
+let ch = canvas.height
 let drawId = null;
 
 window.onresize = function() {
@@ -33,7 +50,7 @@ window.onresize = function() {
   centerX = canvas.width/2;
   centerY = canvas.height/2;
 }
-let energy = 100; //newidea //this could be used for the jumps, they consume energy, which has to be recovered
+let energy = 100; //idea //this could be used for the jumps, they consume energy, which has to be recovered
 let pressedShift = false;
 let pressedCtrl = false;
 
@@ -51,7 +68,7 @@ let dodgePosVisible = false;
 // timers
 let enemySpawnTimer;
 let machineTimer;
-
+let accelerateTimer;
 let gameover = false;
 let score = 0;
 let ammoRegular = 0
@@ -79,11 +96,32 @@ class Player {
     this.radius = radius
     this.color = color
     this.dodgeDistance = dodgeDistance
-    this.velocity = {x: 0,y: 0}
+    this.velocity = { //basically movement speed, //idea // could be upgraded by some way, as a simple engine upgrade, or just make
+      x: 0,
+      y: 0,
+    }
+    this.minVelocity = {
+      x: 0,
+      y: 0,
+    }
+    this.maxVelocity = {
+      x: 3,
+      y: 3,
+    }
+    this.movingLeft = false
+    this.movingRight = false
+    this.movingUp = false
+    this.movingDown = false
     this.hidden = false;
     this.invulnerable = false;
   }
   draw() {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle= this.color;
+    ctx.lineWidth=7.5;
     ctx.beginPath();
     ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2)
     if(this.invulnerable) {
@@ -98,9 +136,52 @@ class Player {
       ctx.fill();
       ctx.closePath();
     }
+    ctx.restore();
   }
-  move(direction) {
-
+  accelerate() {
+    this.moving = true
+    gsap.fromTo(this.velocity,{
+      x: this.velocity.x,
+      y: this.velocity.y,
+    },{
+      x: this.maxVelocity.x,
+      y: this.maxVelocity.y,
+      duration: 2,
+    })
+  }
+  decelerate() {
+    if((this.movingLeft + this.movingRight + this.movingUp + this.movingDown) !== 0) {
+      return
+    }
+    gsap.fromTo(this.velocity,{
+      x: this.velocity.x,
+      y: this.velocity.y,
+    },{
+      x: this.minVelocity.x,
+      y: this.minVelocity.y,
+      duration: 2,
+    })
+    // clearTimeout(accelerateTimer)
+    // accelerateTimer = setTimeout(()=> {
+    //   this.movingLeft = false
+    //   this.movingRight = false
+    //   this.movingUp = false
+    //   this.movingDown = false  
+    // },1000)
+  }
+  move() {
+    if(this.movingLeft) {
+      this.x -= this.velocity.x
+    }
+    if(this.movingRight) {
+      this.x += this.velocity.x
+    }
+    if(this.movingUp) {
+      this.y -= this.velocity.y
+    }
+    if(this.movingDown) {
+      this.y += this.velocity.y
+    }
   }
   dodge(direction) {
     // console.log(this.dodgeDistance)
@@ -142,6 +223,7 @@ class Player {
     
   }
   update() {
+    this.move()
     this.draw()
   }
 }
@@ -155,9 +237,9 @@ class Projectile {
       this.radius = radius;
       this.color = color;
       this.velocity = velocity;
-      this.bounces = 1;
+      this.bounces = 3;
       this.bounced = false;
-      this.power = 1.5
+      this.power = 1.3
       this.type = type;
       this.damage = 8
       this.damageFalloff = {
@@ -208,6 +290,7 @@ class Projectile {
       this.bounced = false;
       this.power = 6
       this.type = type;
+      this.dead = false;
     }
     if(type == 'machine') {
       this.x = x;
@@ -215,13 +298,13 @@ class Projectile {
       this.radius = radius;
       this.color = color;
       this.velocity = {
-        x: velocity.x *1.2,
-        y: velocity.y *1.2,
+        x: velocity.x *1.3,
+        y: velocity.y *1.3,
       };
       this.bounces = 0;
       this.bounced = false;
-      this.power = 1
-      this.damage = 6
+      this.power = 1.3
+      this.damage = 7
       this.type = type;
     }
   }
@@ -236,6 +319,9 @@ class Projectile {
     this.draw();
     this.x += this.velocity.x
     this.y += this.velocity.y
+    // damagefalloff should affect damage, but how to calculate the distance traveled? 
+    // probably log the coordinates of player into the projectile, and then every frame (performance?) do the math.hypot check to know how far it has traveled from that point,
+    // this will also need to account for bounces, so each time it bounces, log the projectile position and add the previous distance somewhere to the total distance traveled
   }
 }
 
@@ -339,6 +425,7 @@ class Particle {
       this.origin = origin
       this.bounces = 2
       this.bounced = false
+      this.power = 1.2
       this.type = type
     }
     if(type == 'explosive') {
@@ -441,7 +528,6 @@ class Info {
   update() {
     this.life--
     if(this.life <= 50) this.visual.style.filter = `opacity(${this.life/50})`
-    // console.log(this.visual.style.filter)
     if(this.life <= 0) {
       this.visual.remove()
       this.dead = true;
@@ -449,21 +535,29 @@ class Info {
   }
 }
 
+class Dialog {
+  constructor(text) {
+    this.text = text
+    this.visual = document.createElement('div')
+    this.visual.classList.add('dialog','lore')
+    this.visual.innerText = this.text
+    this.visual.onclick = ()=> {
+      init();
+      this.visual.remove()
+      dialogContainer.style.display = 'none'
+      dialogs.splice(0,1)
+    }
+    dialogContainer.append(this.visual)
+  }
+}
 function spawnEnemy() {
     if(reachedEnemyCap) return;
 
     var radius = Math.random() * (enemyRadius - 20) + 20; //randomize enemy sizes
-    var x = 0;
-    var y = 0;
+    var x = Math.round(Math.random()) ? 0 - enemyRadius : canvas.width + enemyRadius;
+    var y = Math.random() * canvas.height;
     var switchXY = Math.round(Math.random());
-    if(switchXY) {
-      x = Math.round(Math.random()) ? 0 - enemyRadius : canvas.width + enemyRadius;
-      y = Math.random() * canvas.height;
-    } else {
-      x = Math.random() * canvas.width;
-      y = Math.round(Math.random()) ? 0 - enemyRadius : canvas.height + enemyRadius;
-    }
-    
+    if(switchXY) [x,y] = [y,x]
     var color = getColor('enemy');
     var angle = Math.atan2( player.y - y, player.x - x);
     var velocity = {
@@ -483,8 +577,18 @@ function spawnEnemy() {
   
 }
 
-function init() {
+function init() { //this is a hard reset, this resets everything to the initial state
+  
   gameover = false
+  
+  rooms = []
+  currRoom = null
+  sectorIndex = 1
+  currSector = null
+  currRoom = null
+  roomIndex = 0
+  generateSector()
+  arrowContainer.classList.remove('hidden')
   dodgeDir = null;
   waveActive = true;
   waveNumber = 1;
@@ -511,18 +615,18 @@ function init() {
   enemies.splice(0, enemies.length);
   projectiles.splice(0, projectiles.length);
   particles.splice(0, particles.length);
+  explosions.splice(0, explosions.length);
 
   cancelAnimationFrame(drawId);
   draw()
   
-  clearInterval(enemySpawnTimer);
-  enemySpawnTimer = setInterval(() => {
-    spawnEnemy();
-  },1000);
-  
+  // clearInterval(enemySpawnTimer);
+  // enemySpawnTimer = setInterval(() => {
+  //   spawnEnemy();
+  // },1000);
+  console.log('enemy spawning disabled')
   updateScoreVisual();
   updateAmmoVisual()
-  closeModal();
 }
 
 let centerX = canvas.width/2;
@@ -535,17 +639,17 @@ let maxDodge = 500
 let minDodge = 60
 let cursorRadius = 10;
 let playerMoved = false;
-let dodgeSpeed = 0.1;
+let dodgeSpeed = 0.075;
 let dodgeSpeedMod = dodgeDistance; // interesting idea
 let dodgeResizing = false;
 
 let baseHealth = 500;
 let baseRadius = 80;
 
-const projectiles = [];
-const enemies = [];
-const particles = [];
-const explosions = [];
+let projectiles = [];
+let enemies = [];
+let particles = [];
+let explosions = [];
 
 let projRadius = 7;
 let projectileSpeed = 9;
@@ -558,12 +662,12 @@ let particleRadius = 3;
 let particleVariance = 3;
 let particleSpeed = 4;
 let friction = 0.999;
-
+let machineFireRate = 12
 let explosionColor = 'orange';
 let explosionRadius = 220;
 
 const player = new Player(centerX, centerY, 20, 'white', {x: dodgeDistance, y: dodgeDistance})
-const mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHealth)
+let mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHealth)
 
 
 canvas.addEventListener('mousemove', function(e) {
@@ -571,6 +675,7 @@ canvas.addEventListener('mousemove', function(e) {
   mouseY = e.offsetY
   // console.log(mouseX + ' ' + mouseY)
 })
+
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
 
 function processWheelEvents(e) {
@@ -628,13 +733,14 @@ function autoFire() {
       ammoMachine--
       updateAmmoVisual();
 
-    },100)
+    },1000/machineFireRate)
   }
 }
 
 function fire(e) {
   if(gameover) return;
   if(ammoTotal < 1) return;
+  if(dodgeDir) return;
   calcAmmoTotal()
 
   if(currentAmmoType == 'regular' && ammoRegular > 0) {
@@ -672,7 +778,7 @@ function spawnProjectile(e) {
 function drawBackground() {
   ctx.beginPath();
   ctx.rect(0,0,canvas.width,canvas.height)
-  ctx.fillStyle = 'rgba(0,0,0,1)'
+  ctx.fillStyle = 'hsl(0,0%,2%)'
   ctx.fill()
   ctx.closePath();
 }
@@ -864,7 +970,24 @@ function draw() {
             ))
         }
       }
-        
+      
+      // spawn particles for machine
+      if (projectile.type == 'machine') {
+        for (let i = 0; i < enemy.radius/8; i++) {
+          particles.push(new Particle(
+            (projectile.x + (Math.random()*20 - 10)), 
+            (projectile.y + (Math.random()*20 - 10)), 
+            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+            enemy.color, 
+            { 
+              x: Math.random()*8 - 4 , 
+              y: Math.random()*8 - 4 ,
+            },
+            enemy,
+            'particle'
+            ))
+        }
+      }
         
 
       // shrink enemy on hit by regular
@@ -906,7 +1029,7 @@ function draw() {
         setTimeout(()=> {
           projectiles.splice(indexProj, 1);
         },0)
-        explosions.push(new Explosion(enemy.x,enemy.y,explosionRadius, explosionColor))
+        explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
         //issue //need a way to calculate score here
         // enemy.dead = true;
         gsap.to(enemy,{color: explosionColor, duration: 1})
@@ -917,6 +1040,7 @@ function draw() {
         setTimeout(()=> {
           projectiles.splice(indexProj, 1);
         },0)
+        updateScore('shrink-enemy')
         
 
         
@@ -951,7 +1075,7 @@ function draw() {
       // draws a right triangle and calculates the distance between two points
       const distance = Math.hypot(particle.x - enemy.x,particle.y - enemy.y) 
         
-      // when particle hits an enemy, which isn't its origin, invert it's velocity, 
+      // when particle hits an enemy
       if( (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.x,particleSpeed) + enemySpeed)) && 
           (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.y,particleSpeed) + enemySpeed)) && 
           particle.origin !== enemy && 
@@ -966,6 +1090,7 @@ function draw() {
           }
           particle.bounced = true;
           particle.bounces--
+
           //if the particle has run out of bounces, destroy the particle
           if(particle.bounces <= 0) {
             particles.splice(particleIndex,1)
@@ -981,9 +1106,9 @@ function draw() {
         if(particle.type == 'shrapnel') {
 
           
-          //decrease the enemy radius upon hit by shrapnel particle
+          //decrease the enemy radius upon hit by shrapnel particle //issue, here it marks the enemy for destruction when he is hit by ANY SINGLE shrapnel particle, or maybe it's fine
           enemy.destroy = true;
-          // console.log(enemy)
+          enemy.velInhibition *= particle.power
           gsap.to(enemy, {radius: enemy.radius - 5, duration: 0.1, onComplete:()=> {
             if(enemy.radius <= 10) {
               gsap.to(enemy, {radius: 1, duration: 0.1, onComplete:()=> {
@@ -993,7 +1118,7 @@ function draw() {
                     enemyy.radius < 5
                     ) {
                     enemies.splice(indexx,1)
-                    console.log(enemyy)
+                    // console.log(enemyy)
                   }
                 })
               }})
@@ -1027,7 +1152,14 @@ function draw() {
   explosions.forEach((explosion, explIndex)=>{
     explosion.update()
     if(explosion.life <= 0) {
-      explosions.splice(explIndex,1)
+      setTimeout(()=>{
+        explosions.splice(explIndex,1)
+      },0)
+    }
+
+    let playerDistance = Math.hypot(explosion.x - (player.x - player.radius),explosion.y - (player.y - player.radius))
+    if(playerDistance <= explosion.radius) {
+      endGame()
     }
     enemies.forEach((enemy,enemyIndex) => {
 
@@ -1078,6 +1210,14 @@ function draw() {
   })
   drawCursor();
 
+  // optimizations
+  if(particles.length > 60) {
+    setTimeout(()=>{
+      particles.splice(0,2)
+      console.log('remove particle')
+    },0)
+  }
+
   drawId = requestAnimationFrame(draw)
   if(gameover) cancelAnimationFrame(drawId);
 }
@@ -1125,7 +1265,16 @@ function calcHypotenuse(a, b) {
 }
 
 function start() {
-  init()
+  drawBackground()
+  closeModal();
+  dialogContainer.style.display = ''
+  dialogs.push(new Dialog(`
+  You have found yourself floating in an empty part of cosmos. 
+
+  Your reactor is running low on uranium and your food rations have drastically diminished since you last docked at a refueling station.
+
+  `))
+  
   // bgMusic.play()
 }
 function endGame() {
@@ -1133,6 +1282,7 @@ function endGame() {
   clearInterval(machineTimer);
   openModal('gameover')
 }
+
 
 //keydown
 document.addEventListener('keydown', processKeydown, false)
@@ -1144,26 +1294,54 @@ function processKeydown(e) {
   if(e.code == 'KeyE' ) {
     endGame()
   }
+  if(e.code == 'KeyF' ) {
+    detonate()
+  }
+  if(e.code == 'KeyM' ) {
+    toggleMap()
+  }
   if(e.code == 'ShiftLeft') {
     pressedShift = true
     // console.log('[Shift] down')
     setDodgeOrigin();
   }
-  if(e.code == 'KeyA' && pressedShift) {
-    pressedLeft = true
-    prepareDodge()
+
+  if(!pressedShift) {
+    if(e.code == 'KeyA') {
+      player.movingLeft = true
+      player.accelerate()
+    }
+    if(e.code == 'KeyD') {
+      player.movingRight = true
+      player.accelerate()
+    }
+    if(e.code == 'KeyW') {
+      player.movingUp = true
+      player.accelerate()
+    }
+    if(e.code == 'KeyS') {
+      player.movingDown = true
+      player.accelerate()
+    }
   }
-  if(e.code == 'KeyD' && pressedShift) {
-    pressedRight = true
-    prepareDodge()
-  }
-  if(e.code == 'KeyW' && pressedShift) {
-    pressedUp = true
-    prepareDodge()
-  }
-  if(e.code == 'KeyS' && pressedShift) {
-    pressedDown = true
-    prepareDodge()
+
+  if(pressedShift) {
+    if(e.code == 'KeyA') {
+      pressedLeft = true
+      prepareDodge()
+    }
+    if(e.code == 'KeyD') {
+      pressedRight = true
+      prepareDodge()
+    }
+    if(e.code == 'KeyW') {
+      pressedUp = true
+      prepareDodge()
+    }
+    if(e.code == 'KeyS') {
+      pressedDown = true
+      prepareDodge()
+    }
   }
   if(e.code == 'KeyC') {
     cycleAmmo('normal');
@@ -1180,19 +1358,27 @@ function processKeyup(e) {
 
   }
   if(e.code == 'KeyA') {
+    player.movingLeft = false
     pressedLeft = false
+    player.decelerate()
     // prepareDodge()
   }
   if(e.code == 'KeyD') {
+    player.movingRight = false
     pressedRight = false
+    player.decelerate()
     // prepareDodge()
   }
   if(e.code == 'KeyW') {
+    player.movingUp = false
     pressedUp = false
+    player.decelerate()
     // prepareDodge()
   }
   if(e.code == 'KeyS') {
+    player.movingDown = false
     pressedDown = false
+    player.decelerate()
     // prepareDodge()
   }
 }
@@ -1410,6 +1596,34 @@ function calcAmmoTotal() {
   ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
 }
 //UI functionality
+function updateRoomVisual() {
+  document.querySelector('#room-top').innerText = 'X: ' + currRoom.x + ' Y: ' + currRoom.y
+}
+function updateArrows() {
+  if(currRoom.left == 'portal') {
+    arrows[0].style.display = '' 
+  } else {
+    arrows[0].style.display = 'none' 
+  }
+  if(currRoom.right == 'portal') {
+    arrows[1].style.display = '' 
+  } else {
+    arrows[1].style.display = 'none' 
+  }
+  if(currRoom.top == 'portal') {
+    arrows[2].style.display = '' 
+  } else {
+    arrows[2].style.display = 'none' 
+  }
+  if(currRoom.bottom == 'portal') {
+    arrows[3].style.display = '' 
+  } else {
+    arrows[3].style.display = 'none' 
+  }
+}
+function toggleMap() {
+  mapContainer.classList.toggle('hidden')
+}
 function updateScoreVisual() {
   scoreTop.innerHTML = score;
 }
@@ -1548,23 +1762,201 @@ function addGlow(x, y){
   ctx.globalCompositeOperation = "normal";
 }
 
-
+function detonate() {
+  projectiles.forEach((projectile,index)=> {
+    if(projectile.type == 'explosive') {
+      
+      //  setTimeout(()=> { //issue // the timeout is kinda janking things up, it doesn't remove everything but pushes 1 explosion per projectile anyways
+      explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
+      projectiles.splice(index, 1);
+      // },0)
+    }
+  })
+}
 
 // wave logic
 
-function startWave() {
+// function startWave() {
 
+// }
+
+// function endWave() {
+//   waveActive = false;
+//   waveNumber++
+// }
+
+class Room {
+  constructor(x,y,type,left,right,top,bottom) {
+    this.x = x
+    this.y = y
+    this.type = type
+
+    this.left = left
+    this.right = right
+    this.top = top
+    this.bottom = bottom
+    // essentially if a side == portal, you can travel that direction, direction determines the x and y of the next room, left means x = x -1, y = y etc....
+
+    // this.visual = document.createElement
+  }
 }
 
-function endWave() {
-  waveActive = false;
-  waveNumber++
+class Sector {
+  constructor(number) {
+    this.number = number
+  }
 }
 
 
+let sectorIndex = 1
+let currSector = null
+let map = {
+  x: 8,
+  y: 8,
+}
 
+let rooms = []
+let currRoom = null
+let roomIndex = 0 // only used for generating so far
 
+function generateLayout() {
+  var x = Math.round(Math.random() * map.x -0.5)
+  var y = Math.round(Math.random() * map.y -0.5)
 
+  // entrance is picked randomly
+  rooms.push(new Room(x,y,'entrance', 'wall', 'wall', 'wall', 'wall'))
+  // roomIndex++
+
+  // add additional 6-8 rooms, making the main branch 6-9 rooms total
+  // this ia  fucking mess but it moreorless doesn't matter, it's just a matter of keeping indexing consistent ↓↓↓↓↓
+
+  var roomNum = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6 //issue //i have no idea how the room index works anymore
+  console.log('Total room number: ' + roomNum)
+  if(roomNum >= 10) roomNum = 9 // hard set the roomnum if it actually overflows
+  while(roomIndex < roomNum - 1) {
+    var dir = Math.round(Math.random() * 4 - 0.5)
+    var prevRoom = rooms[roomIndex]
+    var thisRoom = {
+      left: 'wall',
+      right: 'wall',
+      top: 'wall',
+      bottom: 'wall',
+    }
+    var roomX;
+    var roomY;
+
+    if(dir === 0) { // left
+      roomX = prevRoom.x - 1
+      roomY = prevRoom.y
+      prevRoom.left = 'portal'
+      thisRoom.right = 'portal'
+    }
+    else
+    if(dir === 1) { // right
+      roomX = prevRoom.x + 1
+      roomY = prevRoom.y
+      prevRoom.right = 'portal'
+      thisRoom.left = 'portal'
+    }
+    else
+    if(dir === 2) { // up
+      roomX = prevRoom.x
+      roomY = prevRoom.y - 1
+      prevRoom.top = 'portal'
+      thisRoom.bottom = 'portal'
+    }
+    else
+    if(dir === 3) { // down
+      roomX = prevRoom.x
+      roomY = prevRoom.y + 1
+      prevRoom.bottom = 'portal'
+      thisRoom.top = 'portal'
+    }
+    if(roomX < 0 || roomY < 0 || roomX > (map.x - 1) || roomY > (map.y - 1)) {
+      console.log('Room outside of map bounds.')
+      continue
+    }
+    // var dup = rooms.find(room => room.x == roomX && room.y == roomY)
+    // console.log(dup)
+    if(rooms.find(room => room.x == roomX && room.y == roomY)) {
+      console.log('This room position is already occupied.')
+      continue
+    }
+    rooms.push(new Room(roomX, roomY, 'normal',thisRoom.left,thisRoom.right,thisRoom.top,thisRoom.bottom))
+    roomIndex++
+    console.log(roomIndex)
+  }
+  currRoom = rooms[0]
+  var sideBranches = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6
+}
+
+function generateMap() {
+  //make the empty rooms
+  for (let i = 0; i < map.x * map.y; i++) {
+    var room = document.createElement("div");
+    room.classList.add("room");
+    sectorMap.append(room);
+  }
+  // add additional rooms inside them?????? //issue, this is stupid, it all has to be connected with rooms[], the class Room needs to contain the visual, and the visual needs to contain the populated rooms
+  // it's simply dumb to reference and update multiple unconnected arrays and objects and variables
+  for (let i = 0; i < rooms.length; i++) {
+
+    var room = document.createElement('div') 
+    var index = (rooms[i].x + 0) + (rooms[i].y + 0) *8
+
+    room.classList.add('test-room')
+    room.dataset.x = rooms[i].x
+    room.dataset.y = rooms[i].y
+    room.onclick = teleport
+
+    sectorMap.childNodes[index].append(room)
+  }
+  
+  
+}
+
+function clearMap() {
+  sectorMap.innerHTML = '' //issue // this is bad code, this will break if i add anything to the sector map
+}
+
+function generateSector() {
+  clearMap()
+  generateLayout()
+  generateMap()
+  updateRoomVisual()
+  updateArrows()
+}
+
+function travel(x,y) {
+  // clear canvas
+  
+  var destination = rooms.find(
+    room => 
+    room.x == currRoom.x + x && 
+    room.y == currRoom.y + y
+  )
+  if(destination) {
+    currRoom = destination
+    console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
+    console.log(currRoom)
+    updateRoomVisual()
+    updateArrows()
+    updateMapVisual(currRoom)
+  }
+  if(!destination) {
+    console.log('There is no room over there.')
+  }
+}
+function teleport() {
+  currRoom = rooms.find(room => room.x == this.dataset.x && room.y == this.dataset.y)
+  console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
+  console.log(currRoom)
+  updateRoomVisual()
+}
+function updateMapVisual(currRoom) {
+  var index = (currRoom.x + 0) + (currRoom.y + 0) *8
+  var rooms = Array.from(document.querySelectorAll('.room'))
+}
 
 
 // audio
@@ -1581,3 +1973,16 @@ sfxLaser.src = 'audio/laser.wav'
 var bgMusic = new Audio();
 bgMusic.src = 'audio/music.wav'
 bgMusic.loop = true;
+
+
+//optimization code 
+function someMethodIThinkMightBeSlow() {
+  const startTime = performance.now();
+
+  // Do the normal stuff for this function
+
+  const duration = performance.now() - startTime;
+  console.log(`someMethodIThinkMightBeSlow took ${duration}ms`);
+}
+
+drawBackground()

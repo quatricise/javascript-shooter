@@ -26,9 +26,12 @@
       <div id="button-restart" class="button" onclick='start()'>RESTART</div>
     </div>
   </div>
-  <div class="scorebox">
+  <div class="info-box left">
     <div class="score">
       <span>SCORE: </span><span id="score-top">0</span>
+    </div>
+    <div class="score">
+      <span>ROOM: </span><span id="room-top"></span>
     </div>
   </div>
   <div class="ammobox">
@@ -48,7 +51,17 @@
       <span class="ammo-count machine" id="ammo-machine">0</span>
     </div>
   </div>
+  <div class="fullscreen-container hidden" id="arrow-container" >
+    <div class="arrow left" onclick="travel(-1,0)">⮜</div>
+    <div class="arrow right" onclick="travel(1,0)">⮞</div>
+    <div class="arrow top" onclick="travel(0,-1)">⮝</div>
+    <div class="arrow bottom" onclick="travel(0,1)">⮟</div>
+  </div>
   <div class="overlay-main"></div>
+  <div class="fullscreen-container" id="dialog-container"></div>
+  <div class="fullscreen-container hidden" id="map-container" >
+    <div class="sector-map" id="sector-map"></div>
+  </div>
   <canvas id="canvas">
   </canvas>
   <!-- <script type="module">
