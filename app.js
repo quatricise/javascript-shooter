@@ -3,12 +3,14 @@ const ctx = canvas.getContext("2d");
 
 const pi = Math.PI
 
-let shipSprite = new Image();
+let shipSprite = new Image(); //issue i think the ship sprite should be contained within Player class
 shipSprite.src = 'assets/moth_default.png'
 let shipSize = 128;
+
 let ghosts = []
 let ghostNumber = 5
 let ghostOpacity = 0.3
+
 let modal = document.querySelector('#modal-main')
 let dialogGameover = document.querySelector('.dialog.game-over')
 let dialogStart = document.querySelector('.dialog.game-start')
@@ -40,6 +42,8 @@ let ammoSpriteCannonball = document.querySelector('.ammo.cannonball')
 let ammoSpriteExplosive = document.querySelector('.ammo.explosive')
 let ammoSpriteMachine = document.querySelector('.ammo.machine')
 
+let healthbar = document.querySelector('.healthbar')
+let healthSegments = Array.from(document.querySelectorAll('.armor-segment'))
 let overlayMain = document.querySelector('.overlay-main')
 let overlaysInfo = [];
 canvas.width = window.innerWidth
@@ -108,6 +112,8 @@ let reachedEnemyCap = false;
 let waveNumber = 1;
 let waveActive = false;
 
+
+
 //classes
 class Player {
   constructor (x,y,radius,rotation,color,dodgeDistance) {
@@ -132,8 +138,26 @@ class Player {
     this.invulnerable = false
 
     this.armor = 8
+    this.spriteDim = {
+      x: 128,
+      y: 128
+    }
+    this.turret = new Image()
+    this.turret.src = 'assets/moth_default_turret.png'
+    this.turretDim = this.spriteDim
+    this.turretRotation = 0
   }
   draw() {
+    //idea blue glow behind ship
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(this.x,this.y,60,0,pi*2,false)
+    ctx.fillStyle = 'hsla(246, 71%, 50%, 0.75)'
+    ctx.filter = 'blur(70px)'
+    ctx.fill()
+    ctx.closePath()
+    ctx.restore()
+    //draw ship body
     ctx.save()
 
     ctx.translate(this.x,this.y)
@@ -146,8 +170,21 @@ class Player {
     }
     ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
     ctx.restore()
-  }
 
+    //draw turret
+    this.rotateTurret()
+    ctx.save()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.turretRotation * pi / 180)
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'normal'
+    ctx.drawImage(this.turret, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
+    ctx.restore()
+  }
+  rotateTurret() {
+    var angle = Math.atan2(player.y - mouseY, player.x - mouseX);
+    this.turretRotation = 270 + (angle * 180) / pi
+  }
   drawGhosts() {
     ghosts.forEach((ghost, index) => {
       if(ghost.alpha <= 0) {
@@ -231,6 +268,16 @@ class Player {
       if(this.rotation >= 359) this.rotation = 0
 
     }
+  }
+
+  damage() {
+    if(this.armor <= 0) {
+      endGame()
+    }
+    this.armor--
+    updateHealthBar()
+    this.invulnerable = true
+    setTimeout(()=>{this.invulnerable = false},500)
   }
 
   dodge(direction) {
@@ -320,6 +367,7 @@ class Projectile {
         distance: 200,
         amount: 1,
       }
+      this.dead = false;
     }
     if(type == 'shrapnel') {
       this.x = x;
@@ -335,6 +383,7 @@ class Projectile {
       this.power = 2
       this.damage = 100
       this.type = type;
+      this.dead = false;
     }
     if(type == 'cannonball') {
       this.x = x;
@@ -348,8 +397,9 @@ class Projectile {
       this.bounces = 0;
       this.bounced = false;
       this.life = 4;
-      this.power = 5
+      this.power = 6
       this.type = type;
+      this.dead = false;
     }
     if(type == 'explosive') {
       this.x = x;
@@ -380,6 +430,7 @@ class Projectile {
       this.power = 1.3
       this.damage = 7
       this.type = type;
+      this.dead = false;
     }
   }
   draw() {
@@ -634,13 +685,76 @@ class Base {
   }
   draw() {
     ctx.beginPath()
-    ctx.arc(centerX,centerY,this.radius,0, pi*2, false)
+    ctx.arc(this.x,this.y,this.radius,0, pi*2, false)
     ctx.fillStyle = this.color
     ctx.fill()
     ctx.closePath()
   }
   update() {
     this.draw()
+  }
+}
+
+class Debris {
+  constructor(x,y,rotation,velocity,type) {
+    this.x = x
+    this.y = y
+    this.rotation = rotation
+    this.velocity = velocity
+    this.type = type
+    this.sprite = new Image()
+    this.sprite.src = 'assets/debris_basic.png'
+    this.spriteDim = {
+      x: 64,
+      y: 64,
+    }
+  }
+  draw() {
+    ctx.save()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi/180)
+    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
+    ctx.restore()
+    //draw hitbox
+    // ctx.beginPath()
+    // ctx.arc(this.x,this.y,this.spriteDim.x/2,0,pi*2,false)
+    // ctx.strokeStyle = 'white'
+    // ctx.lineWidth = '1px'
+    // ctx.stroke()
+    // ctx.closePath()
+  }
+  update() {
+    this.draw()
+    this.x += this.velocity.x
+    this.y += this.velocity.y
+  }
+}
+
+class Asteroid {
+  constructor(x,y,rotation,velocity,type) {
+    this.x = x
+    this.y = y
+    this.rotation = rotation
+    this.velocity = velocity
+    this.type = type
+    this.sprite = new Image()
+    this.sprite.src = 'assets/asteroid_1.png'
+    this.spriteDim = {
+      x: 128,
+      y: 128
+    }
+  }
+  draw() {
+    ctx.save()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi/180)
+    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
+    ctx.restore()
+  }
+  update() {
+    this.draw()
+    this.x += this.velocity.x
+    this.y += this.velocity.y
   }
 }
 
@@ -749,6 +863,7 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
   player.x = centerX
   player.y = centerY
+  player.armor = 8
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, canvas.width, canvas.height, 'black');
 
@@ -765,6 +880,8 @@ function init() { //this is a hard reset, this resets (almost) everything to the
 
   updateScoreVisual();
   updateAmmoVisual()
+  updateHealthBar()
+  clearRoom()
 }
 
 let centerX = canvas.width/2;
@@ -789,6 +906,8 @@ let enemies = [];
 let particles = [];
 let explosions = [];
 let enemyships = [];
+let asteroids = [];
+let debriss = []
 let projRadius = 5;
 let projectileSpeed = 9;
 let shrapnelRadiusMult = 1.5;
@@ -872,27 +991,35 @@ function determineDodgeDirection() {
   if(min == distLeft) {
     dodgePreview = 'left'
   }
+  else
   if(min == distRight) {
     dodgePreview = 'right'
   }
+  else
   if(min == distUp) {
     dodgePreview = 'up'
   }
+  else
   if(min == distDown) {
     dodgePreview = 'down'
   }
+  else
   if(min == distUpLeft) {
     dodgePreview = 'upLeft'
   }
+  else
   if(min == distUpRight) {
     dodgePreview = 'upRight'
   }
+  else
   if(min == distDownLeft) {
     dodgePreview = 'downLeft'
   }
+  else
   if(min == distDownRight) {
     dodgePreview = 'downRight'
   }
+  else dodgePreview = null
 
 }
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
@@ -1029,21 +1156,20 @@ function drawCursor() {
 function draw() {
 
   drawBackground();
-  mainbase.update();
+  // mainbase.update(); // the base isn't a part of the game anymore
   projectiles.forEach((projectile, indexProj)=> {
-    projectile.update()
+    
 
     // ricochet projectile off walls if bounces > 0
-
-    // left and right wall
+    // for left and right wall
     if(
-        (projectile.x > (canvas.width - projRadius) || projectile.x < (0 + projRadius)) &&
-        projectile.bounces > 0
-      ) {
+      (projectile.x > (canvas.width - projRadius) || projectile.x < (0 + projRadius)) &&
+      projectile.bounces > 0
+      ) 
+      {
       projectile.bounced = true
       projectile.bounces -= 1
       projectile.velocity.x *= -1
-      // projectile.velocity.y *= -1
       setTimeout(()=>{projectile.bounced = false},50)
     }
 
@@ -1054,7 +1180,6 @@ function draw() {
       ) {
       projectile.bounced = true
       projectile.bounces -= 1
-      // projectile.velocity.x *= -1
       projectile.velocity.y *= -1
       setTimeout(()=>{projectile.bounced = false},50)
     }
@@ -1065,305 +1190,310 @@ function draw() {
         projectiles.splice(indexProj, 1);
       },0)
     }
+    projectile.update()
   })
 
-  enemies.forEach((enemy, indexEnemy) => {
-    enemy.update();
-
-    //automatic cleanup of enemies with radius <=1
-    if(enemy.radius <= 1) enemies.splice(indexEnemy,1);
-
-    //automatic cleanup of enemies which are very small and were burned by an explosion
-    if(enemy.exploded == true && enemy.radius < minRadToBurn) {
-      enemy.dead = true;
-      gsap.to(enemy,{radius: 1, duration: enemy.radius/8 , onComplete: () => {
-        enemies.forEach((en, ind) => {
-          if(en.dead == true) enemies.splice(ind,1)
-      })}})
-    }
-
-    // avoid running any more code on dead enemies, they will be removed automatically
-    if(enemy.dead == true) return;
-    let distance = Math.hypot(player.x - enemy.x,player.y - enemy.y)
-    
-    // when player is touched by an enemy
-    if(distance - player.radius - enemy.radius < 0 && enemy.dead == false) {
-      if(player.invulnerable == false) {
-
-        endGame();
-      }
-    }
-    // remove enemy after it travels too far outside canvas bounds
-    if( (enemy.x > (canvas.width + enemyRadius*2 ) || enemy.x < (0 - enemyRadius*2)) || (enemy.y > (canvas.height + enemyRadius*2) || enemy.y < (0 - enemyRadius*2)) ) {
-      enemies.splice(indexEnemy, 1);
-    }
-    
-    // projectile logic for each enemy in enemies
-    projectiles.forEach((projectile, indexProj) => {
-
-
-      let distance = Math.hypot(projectile.x - enemy.x,projectile.y - enemy.y)
-      
-      // when projectile hits an enemy
-      if(distance - enemy.radius - projectile.radius < -1) {
-        
-        if(Math.random()*9 > 5) {
-          gainAmmo('regular')
-          gainAmmo('regular')
-          displayPopup('plus-ammo', enemy.x, enemy.y)
-        }
-
-        // calculate enemy slowdown
-        enemy.velInhibition *= projectile.power
-
-        // spawn particles for regular
-        if (projectile.type == 'regular') {
-          for (let i = 0; i < enemy.radius/3; i++) {
-            particles.push(new Particle(
-              (projectile.x + (Math.random()*20 - 10)), 
-              (projectile.y + (Math.random()*20 - 10)), 
-              (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-              enemy.color, 
-              { 
-                x: Math.random()*10 - 5 , 
-                y: Math.random()*10 - 5 ,
-              },
-              enemy,
-              'particle'
-              ))
-          }
-        }
-          
-        // spawn particles for shrapnel
-        if (projectile.type == 'shrapnel') {
-
-          for (let i = 0; i < enemy.radius/6; i++) {
-            particles.push(new Particle(
-              (projectile.x + (Math.random()*20 - 10)), 
-              (projectile.y + (Math.random()*20 - 10)), 
-              (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-              enemy.color, 
-              { 
-                x: Math.random()*10 - 5 , 
-                y: Math.random()*10 - 5 ,
-              },
-              enemy,
-          'particle'
-          ))
-        }
-
-          
-        for (let i = 0; i < enemy.radius/3; i++) {
-          particles.push(new Particle(
-            (projectile.x + (Math.random()*20 - 10)), 
-            (projectile.y + (Math.random()*20 - 10)), 
-            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-            enemy.color, 
-          { 
-            x: (Math.random()*2 - 1) + projectile.velocity.x, 
-            y: (Math.random()*2 - 1) + projectile.velocity.y,
-          },
-          enemy,
-          'shrapnel'
-          ))
-        }
-      }
-      
-      // spawn particles for cannonball
-      if (projectile.type == 'cannonball') {
-        for (let i = 0; i < enemy.radius/8; i++) {
-          particles.push(new Particle(
-            (projectile.x + (Math.random()*20 - 10)), 
-            (projectile.y + (Math.random()*20 - 10)), 
-            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-            enemy.color, 
-            { 
-              x: Math.random()*8 - 4 , 
-              y: Math.random()*8 - 4 ,
-            },
-            enemy,
-            'particle'
-            ))
-        }
-      }
-
-      // spawn particles for explosive
-      if (projectile.type == 'explosive') {
-        for (let i = 0; i < enemy.radius/5; i++) {
-          particles.push(new Particle(
-            (projectile.x + (Math.random()*20 - 10)), 
-            (projectile.y + (Math.random()*20 - 10)), 
-            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-            explosionColor, 
-            { 
-              x: Math.random()*6 - 3 , 
-              y: Math.random()*6 - 3 ,
-            },
-            enemy,
-            'explosive'
-            ))
-        }
-      }
-      
-      // spawn particles for machine
-      if (projectile.type == 'machine') {
-        for (let i = 0; i < enemy.radius/8; i++) {
-          particles.push(new Particle(
-            (projectile.x + (Math.random()*20 - 10)), 
-            (projectile.y + (Math.random()*20 - 10)), 
-            (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
-            enemy.color, 
-            { 
-              x: Math.random()*8 - 4 , 
-              y: Math.random()*8 - 4 ,
-            },
-            enemy,
-            'particle'
-            ))
-        }
-      }
-        
-
-      // shrink enemy on hit by regular
-      if (enemy.radius > minRadToKill && projectile.type == 'regular') {
-        gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
-        setTimeout(()=> {
-          projectiles.splice(indexProj, 1);
-        },0)
-        updateScore('shrink-enemy')
-      } 
-
-      // hit by cannonball
-      if (projectile.type == 'cannonball') {
-        gsap.to(enemy, {radius: 1, duration: 0.3})
-        projectile.life--
-        projectile.velocity.x *= 1 - (enemy.radius/200 + 0.05)
-        projectile.velocity.y *= 1 - (enemy.radius/200 + 0.05)
-        if(projectile.life < 1) {
-          setTimeout(()=> {
-            projectiles.splice(indexProj, 1);
-          },0)
-        }
-        enemy.dead = true;
-        // console.log(enemy)
-        updateScore('kill-enemy')
-      } 
-      // hit by shrapnel
-      if(projectile.type == 'shrapnel') {
-        setTimeout(()=> {
-          enemies.splice(indexEnemy, 1);
-          projectiles.splice(indexProj, 1);
-        },0)
-        updateScore('kill-enemy')
-        enemy.dead = true;
-      }
-
-      // hit by explosive
-      if(projectile.type == 'explosive') {
-        setTimeout(()=> {
-          projectiles.splice(indexProj, 1);
-        },0)
-        explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
-        //issue //need a way to calculate score here
-        // enemy.dead = true;
-        gsap.to(enemy,{color: explosionColor, duration: 1})
-      }
-      // hit by machine
-      if(projectile.type == 'machine') {
-        gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
-        setTimeout(()=> {
-          projectiles.splice(indexProj, 1);
-        },0)
-        updateScore('shrink-enemy')
-        
-
-        
-      }
-      
-      // kill enemy if it's less than the minimum radius required to kill an enemy
-      if(enemy.radius < minRadToKill) {
-        //mark this enemy as dead to prevent accidentally deleting a different enemy while gsap.to() finishes
-        enemy.dead = true;
-        gsap.to(enemy,{radius: 1, onComplete: () => {
-          enemies.forEach((en, ind) => {
-            if(en.dead == true) enemies.splice(ind,1)
-        })}})
-        setTimeout(()=> {
-          // enemies.splice(indexEnemy, 1);
-          projectiles.splice(indexProj, 1);
-        },0)
-        updateScore('kill-enemy')
-      }
-      // kill all enemies => enemy.dead == true
-      if(enemy.dead == true) {
-        gsap.to(enemy,{radius: 1, duration: enemy.radius/30 , onComplete: () => {
-          enemies.forEach((en, ind) => {
-            if(en.dead == true) enemies.splice(ind,1)
-        })}})
-      }
-      }
-    })
-    
-    particles.forEach((particle, particleIndex) => {
-
-      // draws a right triangle and calculates the distance between two points
-      const distance = Math.hypot(particle.x - enemy.x,particle.y - enemy.y) 
-        
-      // when particle hits an enemy
-      if( (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.x,particleSpeed) + enemySpeed)) && 
-          (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.y,particleSpeed) + enemySpeed)) && 
-          particle.origin !== enemy && 
-          particle.bounced == false
-        ) {
-        if(particle.type == 'regular') {
-
-          // if a particle by any accident gets inside an enemy, destroy the particle
-          if((distance - enemy.radius - particle.radius < 0)) {
-            particles.splice(particleIndex,1)
-            return;
-          }
-          particle.bounced = true;
-          particle.bounces--
-
-          //if the particle has run out of bounces, destroy the particle
-          if(particle.bounces <= 0) {
-            particles.splice(particleIndex,1)
-            return
-          }
-          particle.origin = enemy;
-          particle.velocity.x *= 0.8
-          particle.velocity.y *= 0.8
-          particle.velocity.x *= -1
-          particle.velocity.y *= -1
-          setTimeout(()=>{particle.bounced = false},150)
-        }
-        if(particle.type == 'shrapnel') {
-
-          
-          //decrease the enemy radius upon hit by shrapnel particle //issue, here it marks the enemy for destruction when he is hit by ANY SINGLE shrapnel particle, or maybe it's fine
-          enemy.destroy = true;
-          enemy.velInhibition *= particle.power
-          gsap.to(enemy, {radius: enemy.radius - 5, duration: 0.1, onComplete:()=> {
-            if(enemy.radius <= 10) {
-              gsap.to(enemy, {radius: 1, duration: 0.1, onComplete:()=> {
-                enemies.forEach((enemyy, indexx)=>{
-                  if(
-                    enemyy.destroy == true && 
-                    enemyy.radius < 5
-                    ) {
-                    enemies.splice(indexx,1)
-                    // console.log(enemyy)
-                  }
-                })
-              }})
-            }
-          }})
-        }
-          
-          particles.splice(particleIndex,1)
-      }
-    })
+  enemyships.forEach((ship, shipIndex)=> {
+    ship.update()
   })
+  //debug stopped running all code for enemies, as they are not being used currently
+  // enemies.forEach((enemy, indexEnemy) => {
+  //   enemy.update();
+
+  //   //automatic cleanup of enemies with radius <=1
+  //   if(enemy.radius <= 1) enemies.splice(indexEnemy,1);
+
+  //   //automatic cleanup of enemies which are very small and were burned by an explosion
+  //   if(enemy.exploded == true && enemy.radius < minRadToBurn) {
+  //     enemy.dead = true;
+  //     gsap.to(enemy,{radius: 1, duration: enemy.radius/8 , onComplete: () => {
+  //       enemies.forEach((en, ind) => {
+  //         if(en.dead == true) enemies.splice(ind,1)
+  //     })}})
+  //   }
+
+  //   // avoid running any more code on dead enemies, they will be removed automatically
+  //   if(enemy.dead == true) return;
+  //   let distance = Math.hypot(player.x - enemy.x,player.y - enemy.y)
+    
+  //   // when player is touched by an enemy
+  //   if(distance - player.radius - enemy.radius < 0 && enemy.dead == false) {
+  //     if(player.invulnerable == false) {
+
+  //       endGame();
+  //     }
+  //   }
+  //   // remove enemy after it travels too far outside canvas bounds
+  //   if( (enemy.x > (canvas.width + enemyRadius*2 ) || enemy.x < (0 - enemyRadius*2)) || (enemy.y > (canvas.height + enemyRadius*2) || enemy.y < (0 - enemyRadius*2)) ) {
+  //     enemies.splice(indexEnemy, 1);
+  //   }
+    
+  //   // projectile logic 
+  //   projectiles.forEach((projectile, indexProj) => {
+
+
+  //     let distance = Math.hypot(projectile.x - enemy.x,projectile.y - enemy.y)
+      
+  //     // when projectile hits an enemy
+  //     if(distance - enemy.radius - projectile.radius < -1) {
+        
+  //       if(Math.random()*9 > 5) {
+  //         gainAmmo('regular')
+  //         gainAmmo('regular')
+  //         displayPopup('plus-ammo', enemy.x, enemy.y)
+  //       }
+
+  //       // calculate enemy slowdown
+  //       enemy.velInhibition *= projectile.power
+
+  //       // spawn particles for regular
+  //       if (projectile.type == 'regular') {
+  //         for (let i = 0; i < enemy.radius/3; i++) {
+  //           particles.push(new Particle(
+  //             (projectile.x + (Math.random()*20 - 10)), 
+  //             (projectile.y + (Math.random()*20 - 10)), 
+  //             (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //             enemy.color, 
+  //             { 
+  //               x: Math.random()*10 - 5 , 
+  //               y: Math.random()*10 - 5 ,
+  //             },
+  //             enemy,
+  //             'particle'
+  //             ))
+  //         }
+  //       }
+          
+  //       // spawn particles for shrapnel
+  //       if (projectile.type == 'shrapnel') {
+
+  //         for (let i = 0; i < enemy.radius/6; i++) {
+  //           particles.push(new Particle(
+  //             (projectile.x + (Math.random()*20 - 10)), 
+  //             (projectile.y + (Math.random()*20 - 10)), 
+  //             (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //             enemy.color, 
+  //             { 
+  //               x: Math.random()*10 - 5 , 
+  //               y: Math.random()*10 - 5 ,
+  //             },
+  //             enemy,
+  //         'particle'
+  //         ))
+  //       }
+
+          
+  //       for (let i = 0; i < enemy.radius/3; i++) {
+  //         particles.push(new Particle(
+  //           (projectile.x + (Math.random()*20 - 10)), 
+  //           (projectile.y + (Math.random()*20 - 10)), 
+  //           (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //           enemy.color, 
+  //         { 
+  //           x: (Math.random()*2 - 1) + projectile.velocity.x, 
+  //           y: (Math.random()*2 - 1) + projectile.velocity.y,
+  //         },
+  //         enemy,
+  //         'shrapnel'
+  //         ))
+  //       }
+  //     }
+      
+  //     // spawn particles for cannonball
+  //     if (projectile.type == 'cannonball') {
+  //       for (let i = 0; i < enemy.radius/8; i++) {
+  //         particles.push(new Particle(
+  //           (projectile.x + (Math.random()*20 - 10)), 
+  //           (projectile.y + (Math.random()*20 - 10)), 
+  //           (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //           enemy.color, 
+  //           { 
+  //             x: Math.random()*8 - 4 , 
+  //             y: Math.random()*8 - 4 ,
+  //           },
+  //           enemy,
+  //           'particle'
+  //           ))
+  //       }
+  //     }
+
+  //     // spawn particles for explosive
+  //     if (projectile.type == 'explosive') {
+  //       for (let i = 0; i < enemy.radius/5; i++) {
+  //         particles.push(new Particle(
+  //           (projectile.x + (Math.random()*20 - 10)), 
+  //           (projectile.y + (Math.random()*20 - 10)), 
+  //           (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //           explosionColor, 
+  //           { 
+  //             x: Math.random()*6 - 3 , 
+  //             y: Math.random()*6 - 3 ,
+  //           },
+  //           enemy,
+  //           'explosive'
+  //           ))
+  //       }
+  //     }
+      
+  //     // spawn particles for machine
+  //     if (projectile.type == 'machine') {
+  //       for (let i = 0; i < enemy.radius/8; i++) {
+  //         particles.push(new Particle(
+  //           (projectile.x + (Math.random()*20 - 10)), 
+  //           (projectile.y + (Math.random()*20 - 10)), 
+  //           (Math.random()*particleVariance/2 + (particleRadius - particleVariance/2)), 
+  //           enemy.color, 
+  //           { 
+  //             x: Math.random()*8 - 4 , 
+  //             y: Math.random()*8 - 4 ,
+  //           },
+  //           enemy,
+  //           'particle'
+  //           ))
+  //       }
+  //     }
+        
+
+  //     // shrink enemy on hit by regular
+  //     if (enemy.radius > minRadToKill && projectile.type == 'regular') {
+  //       gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
+  //       setTimeout(()=> {
+  //         projectiles.splice(indexProj, 1);
+  //       },0)
+  //       updateScore('shrink-enemy')
+  //     } 
+
+  //     // hit by cannonball
+  //     if (projectile.type == 'cannonball') {
+  //       gsap.to(enemy, {radius: 1, duration: 0.3})
+  //       projectile.life--
+  //       projectile.velocity.x *= 1 - (enemy.radius/200 + 0.05)
+  //       projectile.velocity.y *= 1 - (enemy.radius/200 + 0.05)
+  //       if(projectile.life < 1) {
+  //         setTimeout(()=> {
+  //           projectiles.splice(indexProj, 1);
+  //         },0)
+  //       }
+  //       enemy.dead = true;
+  //       // console.log(enemy)
+  //       updateScore('kill-enemy')
+  //     } 
+  //     // hit by shrapnel
+  //     if(projectile.type == 'shrapnel') {
+  //       setTimeout(()=> {
+  //         enemies.splice(indexEnemy, 1);
+  //         projectiles.splice(indexProj, 1);
+  //       },0)
+  //       updateScore('kill-enemy')
+  //       enemy.dead = true;
+  //     }
+
+  //     // hit by explosive
+  //     if(projectile.type == 'explosive') {
+  //       setTimeout(()=> {
+  //         projectiles.splice(indexProj, 1);
+  //       },0)
+  //       explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
+  //       //issue //need a way to calculate score here
+  //       // enemy.dead = true;
+  //       gsap.to(enemy,{color: explosionColor, duration: 1})
+  //     }
+  //     // hit by machine
+  //     if(projectile.type == 'machine') {
+  //       gsap.to(enemy, {radius: enemy.radius - projectile.damage, duration: 0.3})
+  //       setTimeout(()=> {
+  //         projectiles.splice(indexProj, 1);
+  //       },0)
+  //       updateScore('shrink-enemy')
+        
+
+        
+  //     }
+      
+  //     // kill enemy if it's less than the minimum radius required to kill an enemy
+  //     if(enemy.radius < minRadToKill) {
+  //       //mark this enemy as dead to prevent accidentally deleting a different enemy while gsap.to() finishes
+  //       enemy.dead = true;
+  //       gsap.to(enemy,{radius: 1, onComplete: () => {
+  //         enemies.forEach((en, ind) => {
+  //           if(en.dead == true) enemies.splice(ind,1)
+  //       })}})
+  //       setTimeout(()=> {
+  //         // enemies.splice(indexEnemy, 1);
+  //         projectiles.splice(indexProj, 1);
+  //       },0)
+  //       updateScore('kill-enemy')
+  //     }
+  //     // kill all enemies => enemy.dead == true
+  //     if(enemy.dead == true) {
+  //       gsap.to(enemy,{radius: 1, duration: enemy.radius/30 , onComplete: () => {
+  //         enemies.forEach((en, ind) => {
+  //           if(en.dead == true) enemies.splice(ind,1)
+  //       })}})
+  //     }
+  //     }
+  //   })
+    
+  //   particles.forEach((particle, particleIndex) => {
+
+  //     // draws a right triangle and calculates the distance between two points
+  //     const distance = Math.hypot(particle.x - enemy.x,particle.y - enemy.y) 
+        
+  //     // when particle hits an enemy
+  //     if( (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.x,particleSpeed) + enemySpeed)) && 
+  //         (distance - enemy.radius - particle.radius < (Math.max(particle.velocity.y,particleSpeed) + enemySpeed)) && 
+  //         particle.origin !== enemy && 
+  //         particle.bounced == false
+  //       ) {
+  //       if(particle.type == 'regular') {
+
+  //         // if a particle by any accident gets inside an enemy, destroy the particle
+  //         if((distance - enemy.radius - particle.radius < 0)) {
+  //           particles.splice(particleIndex,1)
+  //           return;
+  //         }
+  //         particle.bounced = true;
+  //         particle.bounces--
+
+  //         //if the particle has run out of bounces, destroy the particle
+  //         if(particle.bounces <= 0) {
+  //           particles.splice(particleIndex,1)
+  //           return
+  //         }
+  //         particle.origin = enemy;
+  //         particle.velocity.x *= 0.8
+  //         particle.velocity.y *= 0.8
+  //         particle.velocity.x *= -1
+  //         particle.velocity.y *= -1
+  //         setTimeout(()=>{particle.bounced = false},150)
+  //       }
+  //       if(particle.type == 'shrapnel') {
+
+          
+  //         //decrease the enemy radius upon hit by shrapnel particle //issue, here it marks the enemy for destruction when he is hit by ANY SINGLE shrapnel particle, or maybe it's fine
+  //         enemy.destroy = true;
+  //         enemy.velInhibition *= particle.power
+  //         gsap.to(enemy, {radius: enemy.radius - 5, duration: 0.1, onComplete:()=> {
+  //           if(enemy.radius <= 10) {
+  //             gsap.to(enemy, {radius: 1, duration: 0.1, onComplete:()=> {
+  //               enemies.forEach((enemyy, indexx)=>{
+  //                 if(
+  //                   enemyy.destroy == true && 
+  //                   enemyy.radius < 5
+  //                   ) {
+  //                   enemies.splice(indexx,1)
+  //                   // console.log(enemyy)
+  //                 }
+  //               })
+  //             }})
+  //           }
+  //         }})
+  //       }
+          
+  //         particles.splice(particleIndex,1)
+  //     }
+  //   })
+  // })
 
   // update and delete particles with alpha <= 0
   particles.forEach((particle, index) => {
@@ -1372,9 +1502,7 @@ function draw() {
       particles.splice(index,1)
     }
   })
-  enemyships.forEach((ship, index) => {
-    ship.update()
-  })
+
   //spawning mechanic
   if(enemies.length >= 12) {
     reachedEnemyCap = true;
@@ -1425,7 +1553,103 @@ function draw() {
       }
     })
   })
+  //asteroid mechanic
+
+  asteroids.forEach((asteroid, astIndex) => {
+
+    if(
+      asteroid.x > cw + asteroid.spriteDim.x || 
+      asteroid.x < 0 - asteroid.spriteDim.x  || 
+      asteroid.y > ch + +asteroid.spriteDim.y  || 
+      asteroid.y < 0 - asteroid.spriteDim.y 
+    ) {
+      setTimeout(()=>{
+        asteroids.splice(astIndex,1)
+      },0)
+    }
+    let distance = Math.hypot(player.x - asteroid.x,player.y - asteroid.y)
+    
+    // when player touches debris
+    if(distance - player.radius - asteroid.spriteDim.x/2 < 0) { //issue player radius is still being used to detect collision
+      if(player.invulnerable == false) {
+
+        player.damage()
+      }
+    }
+    // check for collision with projectiles
+    projectiles.forEach((projectile)=> {
+      let dist = Math.hypot(projectile.x - asteroid.x, projectile.y - asteroid.y) 
+      if(
+        dist < asteroid.spriteDim.x/2 || 
+        dist < asteroid.spriteDim.y/2
+      ) {
+        asteroid.velocity.x += projectile.velocity.x/12 * projectile.power
+        asteroid.velocity.y += projectile.velocity.y/12 * projectile.power
+        projectile.dead = true
+
+        setTimeout(()=>{
+          projectiles.forEach((p,ind)=> {
+            if(p.dead == true) 
+            projectiles.splice(ind,1)
+            console.log('removed projectile upon hitting asteroid')
+          })}
+        ,0)
+      }
+    })
+    asteroid.update()
+  })
+
+
+  //debris mechanic
   
+  debriss.forEach((debris, debIndex) => {
+    //remove debris if outside of map bounds
+    if(
+      debris.x > cw + debris.spriteDim.x || 
+      debris.x < 0 - debris.spriteDim.x  || 
+      debris.y > ch + +debris.spriteDim.y  || 
+      debris.y < 0 - debris.spriteDim.y 
+    ) {
+      setTimeout(()=>{
+        debriss.splice(debIndex,1)
+      },0)
+    }
+
+    let distance = Math.hypot(player.x - debris.x,player.y - debris.y)
+    
+    // when player touches debris
+    if(distance - player.radius - debris.spriteDim.x/2 < 0) { //issue player radius is still being used to detect collision
+      if(player.invulnerable == false) {
+
+        player.damage()
+      }
+    }
+    // check for collision with projectiles
+    projectiles.forEach((projectile)=> {
+      let dist = Math.hypot(projectile.x - debris.x, projectile.y - debris.y) 
+      if(
+        dist < debris.spriteDim.x/2 || 
+        dist < debris.spriteDim.y/2
+      ) {
+        debris.velocity.x += projectile.velocity.x/12 * projectile.power
+        debris.velocity.y += projectile.velocity.y/12 * projectile.power
+        projectile.dead = true
+
+        setTimeout(()=>{
+          projectiles.forEach((p,ind)=> {
+            if(p.dead == true) 
+            projectiles.splice(ind,1)
+            console.log('removed projectile upon hitting debris')
+          })}
+        ,0)
+      }
+    })
+    debris.update()
+  })
+  
+
+
+
   //player mechanics
   
   player.update();
@@ -1453,25 +1677,32 @@ function draw() {
       fired = false
     },100)
   }
+
+
+
   // cursor, draw this last
-  drawCursor();
+  // drawCursor();
   
   // optimizations
   if(particles.length > 60) {
     setTimeout(()=>{
       particles.splice(0,2)
-      console.log('remove particle')
     },0)
   }
+  
 
   drawId = requestAnimationFrame(draw)
   if(gameover) cancelAnimationFrame(drawId);
 }
 // ↑↑↑↑↑↑ end of draw()
+
+
 function drawFireAnim() {
   ctx.beginPath()
   ctx.arc(player.x,player.y,10,0, pi*2, false)
-  ctx.strokeStyle = `hsla(0,0%,100%,${0 + 0.1 * firedFadeout})`
+  // ctx.strokeStyle = `hsla(35,100%,60%,${0 + 0.1 * firedFadeout})`
+  ctx.strokeStyle = `hsla(221,100%,70%,${0 + 0.1 * firedFadeout})`
+  ctx.lineWidth = 5
   ctx.stroke()
   ctx.closePath()
   if(firedFadeout > 0) firedFadeout--
@@ -1722,11 +1953,12 @@ function dodgeFinish() {
 
 function displayDodgePositions() {
   dodgePosVisible = true;
-  if(windup < 40) windup += 8
+  if(windup < 48) windup += 8
   ctx.save()
   ctx.globalAlpha = windup / 100
   if(dodgeDir) ctx.globalAlpha *= 0.7
   ctx.strokeStyle = player.color
+  ctx.lineWidth = 2.5
   ctx.fillStyle = 'white';
   //left
   ctx.beginPath();
@@ -1866,8 +2098,19 @@ function gainAmmo(type) {
 function calcAmmoTotal() {
   ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
 }
+
 //UI functionality
-function updateRoomVisual() {
+
+function updateHealthBar() {
+
+  for (let i = 0; i < healthSegments.length; i++) {
+    healthSegments[i].classList.add('empty')
+  }
+  for (let i = 0; i < player.armor; i++) {
+    healthSegments[i].classList.remove('empty')
+  }
+}
+function updateRoomDebugVisual() {
   document.querySelector('#room-top').innerText = 'X: ' + currRoom.x + ' Y: ' + currRoom.y
 }
 function updateArrows() {
@@ -2057,9 +2300,10 @@ function detonate() {
 // }
 
 class Room {
-  constructor(x,y,type,left,right,top,bottom) {
+  constructor(x,y,index,type,left,right,top,bottom) {
     this.x = x
     this.y = y
+    this.index = index
     this.type = type
 
     this.left = left
@@ -2095,7 +2339,7 @@ function generateLayout() {
   // generate a random location of the entrance
   var x = Math.round(Math.random() * map.x -0.5)
   var y = Math.round(Math.random() * map.y -0.5)
-  rooms.push(new Room(x,y,'entrance', 'wall', 'wall', 'wall', 'wall'))
+  rooms.push(new Room(x,y,roomIndex,'entrance', 'wall', 'wall', 'wall', 'wall'))
   
   // add additional 6-8 rooms, making the main branch 6-9 rooms total
   // this ia  fucking mess but it moreorless doesn't matter, it's just a matter of keeping indexing consistent ↓↓↓↓↓
@@ -2142,12 +2386,12 @@ function generateLayout() {
     }
 
     if(roomX < 0 || roomY < 0 || roomX > (map.x - 1) || roomY > (map.y - 1)) {
-      console.log('Room outside of map bounds.')
+      // console.log('Room outside of map bounds.') //debug
       continue
     }
 
     if(rooms.find(room => room.x == roomX && room.y == roomY)) {
-      console.log('This room position is already occupied.')
+      // console.log('This room position is already occupied.') //debug
       continue
     }
 
@@ -2170,9 +2414,9 @@ function generateLayout() {
       prevRoom.bottom = 'portal'
       thisRoom.top = 'portal'
     }
-    rooms.push(new Room(roomX, roomY, 'normal',thisRoom.left,thisRoom.right,thisRoom.top,thisRoom.bottom))
     roomIndex++
-    console.log(roomIndex)
+    rooms.push(new Room(roomX, roomY, roomIndex, 'normal',thisRoom.left,thisRoom.right,thisRoom.top,thisRoom.bottom))
+    // console.log(roomIndex)
   }
 
   currRoom = rooms[0]
@@ -2219,42 +2463,87 @@ function generateSector() {
   initSectorVars()
   clearMap()
   generateLayout()
-  if(layoutSuccess) {
-    generateMap()
-    updateRoomVisual()
-    updateArrows()
-    updateMapVisual(currRoom)
+  if(!layoutSuccess) {
+    layoutSuccess = null
+    return
   }
-  layoutSuccess = null
+  generateMap()
+  updateRoomDebugVisual()
+  updateArrows()
+  updateMapVisual(currRoom)
 }
 
 function travel(x,y) {
+  console.log('--traveled--')
+
   // clear canvas
-  
+  clearRoom()
   var destination = rooms.find(
     room => 
     room.x == currRoom.x + x && 
     room.y == currRoom.y + y
   )
-  if(destination) {
-    currRoom = destination
-    console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
-    console.log(currRoom)
-    updateRoomVisual()
-    updateArrows()
-    updateMapVisual(currRoom)
-  }
   if(!destination) {
     console.log('There is no room over there.')
+    return
   }
+
+  currRoom = destination
+  console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
+  console.log(currRoom)
+  updateRoomDebugVisual()
+  updateArrows()
+  updateMapVisual(currRoom)
+  loadRoom(currRoom)
 }
-function teleport() {
+
+function teleport() { //debug // this is msotly a debug feature, it probably won't make it into the game, i like the linear travel, this feels cheaty
+  console.log('--teleported--')
+  clearRoom()
+
   currRoom = rooms.find(room => room.x == this.dataset.x && room.y == this.dataset.y)
   console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
   console.log(currRoom)
-  updateRoomVisual()
+  updateRoomDebugVisual()
   updateArrows()
   updateMapVisual(currRoom)
+  loadRoom(currRoom)
+}
+
+let roomtypes = [
+  'asteroid',
+  'debris',
+  'enemy-ship',
+  'shipwreck',
+  'empty',
+]
+
+function loadRoom(room) {
+  // this function loads all content that should be inside a room when you travel there
+  
+  // so far i will simply randomize it
+  var rand = Math.round(Math.random()*5)
+  var type = roomtypes[rand]
+
+  if(type == 'asteroid') {
+    distributeAsteroids()
+  }
+  if(type == 'debris') {
+    distributeDebris()
+  }
+  if(type == 'enemy-ship') {
+    spawnEnemyShip()
+  }
+  
+}
+function clearRoom() {
+  projectiles = []
+  particles = []
+  enemies = []
+  explosions = []
+  enemyships = []
+  asteroids = []
+  debriss = []
 }
 function updateMapVisual(currRoom) {
   var index = (currRoom.x + 0) + (currRoom.y + 0) *8
@@ -2264,24 +2553,14 @@ function updateMapVisual(currRoom) {
   })
   rooms[index].firstChild.style.borderColor = 'orange'
 }
+
+
+
 //math functions
 function ctg(x) { return 1 / Math.tan(x); }
 function arcctg(x) { return pi / 2 - Math.atan(x); }
 
-// audio
 
-//issue // gotta make the audiocontext work
-
-// var ctxa = new AudioContext();
-
-// var amp = ctxa.createGain()
-
-var sfxLaser = new Audio();
-sfxLaser.src = 'audio/laser.wav'
-// sfxLaser.onload = console.log(sfxLaser.duration)
-var bgMusic = new Audio();
-bgMusic.src = 'audio/music.wav'
-bgMusic.loop = true;
 
 
 //optimization code 
@@ -2295,3 +2574,52 @@ function someMethodIThinkMightBeSlow() {
 }
 
 drawBackground()
+// distributeDebris()
+// distributeDebris()
+// distributeDebris()
+function spawnDebris(x,y,rotation,velocity,type) { //pointless this is kinda pointless function, not providing any extra functionality 
+  debriss.push(new Debris(x,y,rotation,velocity,type))
+}
+
+function distributeDebris() {
+  var debrisTotal = 3
+  var num = 0
+  while(num < debrisTotal) {
+    var x = centerX + (Math.random()*cw/2 - cw/2)
+    var y = centerX + (Math.random()*ch/2 - ch/2)
+    var rotation = Math.random()*360
+    // var velocity = {
+    //   x: 0,
+    //   y: 0,
+    // }
+    var velocity = {
+      x: Math.random()*2 - 1,
+      y: Math.random()*2 - 1,
+    }
+    // spawnDebris(x, y, rotation, velocity, 'basic')
+    debriss.push(new Debris(x, y, rotation, velocity, 'basic'))
+    num++
+  }
+  
+}
+
+function distributeAsteroids() {
+  var total = 3
+  var num = 0
+  while(num < total) {
+    var x = centerX + (Math.random()*cw/2 - cw/2)
+    var y = centerX + (Math.random()*ch/2 - ch/2)
+    var rotation = Math.random()*360
+    // var velocity = {
+    //   x: 0,
+    //   y: 0,
+    // }
+    var velocity = {
+      x: Math.random()*2 - 1,
+      y: Math.random()*2 - 1,
+    }
+    asteroids.push(new Asteroid(x, y, rotation, velocity, 'basic'))
+    num++
+  }
+  
+}

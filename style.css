@@ -16,7 +16,7 @@ body {
   box-sizing: border-box;
 }
 #canvas {
-  cursor: none;
+  /* cursor: none; */
 }
 .info-box.left {
   position: absolute;
@@ -188,6 +188,7 @@ body {
   border-width: 1px;
   border-color: rgba(255, 255, 255, 0.308);
   box-shadow: 0px 0px 100px 20px rgba(118, 123, 255, 0.158);
+  cursor: default;
 }
 
 .sector-map {
@@ -265,20 +266,43 @@ body {
 
 .healthbar-container {
   /* position: absolute; */
+  margin-right: 10px;
 }
 .healthbar {
   display: flex;
   flex-direction: row;
-  background-color: rgb(66, 66, 66);
+  background-color: rgb(41, 41, 41);
   padding: 4px 0 4px 4px;
   border-radius: 3px;
+  border: 1px solid white;
 }
 /* .healthbar:first-child {
   margin-right: 0;
 } */
-.health-segment {
+.armor-segment {
   height: 25px;
   width: 15px;
-  background-color: rgb(0, 132, 255);
+  background-color: rgb(0, 60, 255);
+  margin-right: 4px;
+}
+
+.armor-segment.empty {
+  height: 25px;
+  width: 15px;
+  background-color: rgb(105, 108, 116);
+  margin-right: 4px;
+}
+.energy {
+  display: flex;
+  flex-direction: row;
+  background-color: rgb(41, 41, 41);
+  padding: 4px 0 4px 4px;
+  border-radius: 3px;
+  border: 1px solid white;
+}
+.energy-cell {
+  height: 25px;
+  width: 100px;
+  background-color: rgb(72, 167, 43);
   margin-right: 4px;
 }
