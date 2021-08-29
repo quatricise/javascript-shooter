@@ -28,6 +28,8 @@ body {
   pointer-events: none;
   display: flex;
   flex-direction: row;
+  align-items: center;
+  align-content: center;
 }
 
 .score {
@@ -259,4 +261,24 @@ body {
   height: 100%;
   border: 3px solid white;
   color: white;
+}
+
+.healthbar-container {
+  /* position: absolute; */
+}
+.healthbar {
+  display: flex;
+  flex-direction: row;
+  background-color: rgb(66, 66, 66);
+  padding: 4px 0 4px 4px;
+  border-radius: 3px;
+}
+/* .healthbar:first-child {
+  margin-right: 0;
+} */
+.health-segment {
+  height: 25px;
+  width: 15px;
+  background-color: rgb(0, 132, 255);
+  margin-right: 4px;
 }

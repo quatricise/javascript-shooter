@@ -8,7 +8,7 @@ shipSprite.src = 'assets/moth_default.png'
 let shipSize = 128;
 let ghosts = []
 let ghostNumber = 5
-let ghostOpacity = 0.4
+let ghostOpacity = 0.3
 let modal = document.querySelector('#modal-main')
 let dialogGameover = document.querySelector('.dialog.game-over')
 let dialogStart = document.querySelector('.dialog.game-start')
@@ -74,6 +74,7 @@ let dodgeOrigin = null;
 let dodgeWindow;
 let windup = 0;
 let dodgePosVisible = false;
+let dodgePreview = null;
 
 let turningCCW = false
 let turningCW = false
@@ -129,6 +130,8 @@ class Player {
     this.movingDown = false
     this.hidden = false
     this.invulnerable = false
+
+    this.armor = 8
   }
   draw() {
     ctx.save()
@@ -139,6 +142,7 @@ class Player {
 
     if(this.invulnerable) {
       ctx.globalAlpha = 0.4;
+      ctx.filter = 'saturate(0)'
     }
     ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
     ctx.restore()
@@ -162,29 +166,30 @@ class Player {
   }
   accelerate() {
     if(!movingForward) return;
+    if(dodgeDir) return;
       var rad; 
       if(this.rotation >= 0 && this.rotation < 90) {
         rad = (90 - this.rotation) * (pi/180);
-        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/10 )
-        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/10 )
+        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/15 )
+        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/15 )
       }
 
       if(this.rotation >= 90 && this.rotation < 180) {
         rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/10 )
-        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/10 )
+        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/15 )
+        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/15 )
       }
 
       if(this.rotation >= 180 && this.rotation < 270) {
         rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/10 )
-        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/10 )
+        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/15 )
+        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/15 )
       }
 
       if(this.rotation >= 270 && this.rotation < 360) {
         rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/10 )
-        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/10 )
+        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/15 )
+        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/15 )
       }
       // console.log('Ship angle: ' + (rad*180)/pi)
   }
@@ -234,38 +239,38 @@ class Player {
       playerMoved = true;
       player.invulnerable = true;
       if(direction == 'left') {
-        gsap.fromTo(this,{x: this.x }, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x})
+        gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x})
         dodgeDir = direction;
       }
       if(direction == 'right') {
-        gsap.fromTo(this,{x: this.x }, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x})
+        gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x})
         dodgeDir = direction;
       }
       if(direction == 'up') {
-        gsap.fromTo(this,{y: this.y }, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},y: this.y -= this.dodgeDistance.y})
+        gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y -= this.dodgeDistance.y})
         dodgeDir = direction;
       }
       if(direction == 'down') {
-        gsap.fromTo(this,{y: this.y }, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},y: this.y += this.dodgeDistance.y})
+        gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y += this.dodgeDistance.y})
         dodgeDir = direction;
       }
       if(direction == 'upLeft') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
+        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
         dodgeDir = direction;
       }
       if(direction == 'downLeft') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
+        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
         dodgeDir = direction;
       }
       if(direction == 'upRight') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
+        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
         dodgeDir = direction;
       }
       if(direction == 'downRight') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1000), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
+        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
         dodgeDir = direction;
       }
-    
+      this.velocity.x = this.velocity.y = 0
   }
   update() {
     this.steer()
@@ -289,7 +294,7 @@ class Ghost {
     ctx.save()
     ctx.translate(this.x,this.y)
     ctx.rotate(this.rotation * pi / 180)
-
+    if(player.invulnerable) ctx.filter = 'saturate(0)'
     ctx.globalAlpha = this.alpha;
     ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
 
@@ -756,7 +761,7 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   draw()
   
 
-  spawnEnemyShip()
+  // spawnEnemyShip()
 
   updateScoreVisual();
   updateAmmoVisual()
@@ -772,7 +777,7 @@ let maxDodge = 500
 let minDodge = 60
 let cursorRadius = 10;
 let playerMoved = false;
-let dodgeSpeed = 0.075;
+let dodgeSpeed = 0.05;
 let dodgeSpeedMod = dodgeDistance; // interesting idea
 let dodgeResizing = false;
 
@@ -807,8 +812,89 @@ canvas.addEventListener('mousemove', function(e) {
   mouseX = e.offsetX
   mouseY = e.offsetY
   // console.log(mouseX + ' ' + mouseY)
+  if(pressedShift) {
+    determineDodgeDirection()
+  }
 })
+function determineDodgeDirection() {
+  let distLeft = 
+  Math.hypot(
+    (player.x - player.dodgeDistance.x) - mouseX, 
+    player.y - mouseY) 
 
+  let distRight = 
+  Math.hypot(
+    (player.x + player.dodgeDistance.x) - mouseX, 
+    player.y - mouseY) 
+
+  let distUp = 
+  Math.hypot(
+    player.x - mouseX, 
+    (player.y - player.dodgeDistance.y) - mouseY) 
+
+  let distDown = 
+  Math.hypot(
+    player.x  - mouseX, 
+    (player.y + player.dodgeDistance.y) - mouseY) 
+
+  let distUpLeft = 
+  Math.hypot(
+    (player.x - (player.dodgeDistance.x / 1.414)) - mouseX, 
+    (player.y - (player.dodgeDistance.y / 1.414)) - mouseY)
+
+  let distDownLeft = 
+  Math.hypot(
+    (player.x - (player.dodgeDistance.x / 1.414)) - mouseX, 
+    (player.y + (player.dodgeDistance.y / 1.414)) - mouseY) 
+
+  let distUpRight = 
+  Math.hypot(
+    (player.x + (player.dodgeDistance.x / 1.414)) - mouseX, 
+    (player.y - (player.dodgeDistance.y / 1.414)) - mouseY)
+
+  let distDownRight = 
+  Math.hypot(
+    (player.x + (player.dodgeDistance.x / 1.414)) - mouseX, 
+    (player.y + (player.dodgeDistance.y / 1.414)) - mouseY) 
+
+   
+  let min = Math.min(
+    distLeft,
+    distRight,
+    distUp,
+    distDown,
+    distUpLeft,
+    distDownLeft,
+    distUpRight,
+    distDownRight
+    );
+
+  if(min == distLeft) {
+    dodgePreview = 'left'
+  }
+  if(min == distRight) {
+    dodgePreview = 'right'
+  }
+  if(min == distUp) {
+    dodgePreview = 'up'
+  }
+  if(min == distDown) {
+    dodgePreview = 'down'
+  }
+  if(min == distUpLeft) {
+    dodgePreview = 'upLeft'
+  }
+  if(min == distUpRight) {
+    dodgePreview = 'upRight'
+  }
+  if(min == distDownLeft) {
+    dodgePreview = 'downLeft'
+  }
+  if(min == distDownRight) {
+    dodgePreview = 'downRight'
+  }
+
+}
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
 
 function processWheelEvents(e) {
@@ -850,7 +936,14 @@ function resizeDodge(e) {
 }
 // canvas.addEventListener('click', fire)
 
-canvas.addEventListener('mousedown', fire)
+canvas.addEventListener('mousedown', function(e) {
+  if(!pressedShift) {
+    fire(e)
+  }
+  if(pressedShift) {
+    player.dodge(dodgePreview)
+  }
+})
 canvas.addEventListener('mouseup', function() {
   clearInterval(machineTimer);
 })
@@ -1468,7 +1561,7 @@ function processKeydown(e) {
   if(e.code == 'ShiftLeft') {
     pressedShift = true
     // console.log('[Shift] down')
-    setDodgeOrigin();
+    // setDodgeOrigin();
     prepareDodge();
   }
 
@@ -1573,14 +1666,15 @@ function processKeyup(e) {
 }
 
 //player movement
-function setDodgeOrigin() {
-  dodgeOrigin = {
-    x: player.x,
-    y: player.y,
-  }
-}
 
-function prepareDodge() {
+// function setDodgeOrigin() {
+//   dodgeOrigin = {
+//     x: player.x,
+//     y: player.y,
+//   }
+// }
+
+function prepareDodge() { //issue deprecated code probably, i think this does nothing now
   if(!pressedShift) {
     console.log('Dodge canceled.')
   }
@@ -1618,10 +1712,11 @@ function prepareDodge() {
     direction = 'downRight'
   }
 }
+
 function dodgeFinish() {
   dodgeDir = null;
   player.invulnerable = false;
-  setDodgeOrigin();
+  // setDodgeOrigin();
   windup = 0;
 }
 
@@ -1630,110 +1725,119 @@ function displayDodgePositions() {
   if(windup < 40) windup += 8
   ctx.save()
   ctx.globalAlpha = windup / 100
+  if(dodgeDir) ctx.globalAlpha *= 0.7
   ctx.strokeStyle = player.color
-
+  ctx.fillStyle = 'white';
   //left
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x - player.dodgeDistance.x,
-    dodgeOrigin.y,
+    player.x - player.dodgeDistance.x,
+    player.y,
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'left') ctx.fill()
   ctx.closePath();
 
   // right
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x + player.dodgeDistance.x,
-    dodgeOrigin.y,
+    player.x + player.dodgeDistance.x,
+    player.y,
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
-  ctx.closePath();
-
-  //down
-  ctx.beginPath();
-  ctx.arc(
-    dodgeOrigin.x,
-    dodgeOrigin.y + player.dodgeDistance.y,
-    player.radius,
-    0,
-    pi * 2, 
-    false
-    )
-  ctx.stroke();
+  if(dodgePreview == 'right') ctx.fill()
   ctx.closePath();
 
   // up
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x,
-    dodgeOrigin.y - player.dodgeDistance.y,
+    player.x,
+    player.y - player.dodgeDistance.y,
+    player.radius,
+    0,
+    pi * 2, 
+    false
+    )
+    ctx.stroke();
+    if(dodgePreview == 'up') ctx.fill()
+    ctx.closePath();
+
+  //down
+  ctx.beginPath();
+  ctx.arc(
+    player.x,
+    player.y + player.dodgeDistance.y,
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'down') ctx.fill()
   ctx.closePath();
-
+    
   // upLeft
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x - (player.dodgeDistance.x / 1.414),
-    dodgeOrigin.y - (player.dodgeDistance.y / 1.414),
+    player.x - (player.dodgeDistance.x / 1.414),
+    player.y - (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'upLeft') ctx.fill()
   ctx.closePath();
 
   // downLeft
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x - (player.dodgeDistance.x / 1.414),
-    dodgeOrigin.y + (player.dodgeDistance.y / 1.414),
+    player.x - (player.dodgeDistance.x / 1.414),
+    player.y + (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'downLeft') ctx.fill()
   ctx.closePath();
 
   // upRight
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x + (player.dodgeDistance.x / 1.414),
-    dodgeOrigin.y - (player.dodgeDistance.y / 1.414),
+    player.x + (player.dodgeDistance.x / 1.414),
+    player.y - (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'upRight') ctx.fill()
   ctx.closePath();
 
   // downRight
   ctx.beginPath();
   ctx.arc(
-    dodgeOrigin.x + (player.dodgeDistance.x / 1.414),
-    dodgeOrigin.y + (player.dodgeDistance.y / 1.414),
+    player.x + (player.dodgeDistance.x / 1.414),
+    player.y + (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
     pi * 2, 
     false
     )
   ctx.stroke();
+  if(dodgePreview == 'downRight') ctx.fill()
   ctx.closePath();
 
   ctx.restore()
