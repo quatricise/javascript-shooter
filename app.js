@@ -1,6 +1,14 @@
 const canvas = document.querySelector('#canvas');
 const ctx = canvas.getContext("2d");
 
+const pi = Math.PI
+
+let shipSprite = new Image();
+shipSprite.src = 'assets/moth_default.png'
+let shipSize = 128;
+let ghosts = []
+let ghostNumber = 5
+let ghostOpacity = 0.4
 let modal = document.querySelector('#modal-main')
 let dialogGameover = document.querySelector('.dialog.game-over')
 let dialogStart = document.querySelector('.dialog.game-start')
@@ -49,6 +57,8 @@ window.onresize = function() {
   canvas.height = window.innerHeight
   centerX = canvas.width/2;
   centerY = canvas.height/2;
+  cw = canvas.width 
+  ch = canvas.height
 }
 let energy = 100; //idea //this could be used for the jumps, they consume energy, which has to be recovered
 let pressedShift = false;
@@ -65,10 +75,19 @@ let dodgeWindow;
 let windup = 0;
 let dodgePosVisible = false;
 
+let turningCCW = false
+let turningCW = false
+let movingForward = false
+let movingBackward = false
+
+let fired = false;
+let firedFadeout = 10;
 // timers
 let enemySpawnTimer;
 let machineTimer;
 let accelerateTimer;
+let firedTimer;
+
 let gameover = false;
 let score = 0;
 let ammoRegular = 0
@@ -90,99 +109,125 @@ let waveActive = false;
 
 //classes
 class Player {
-  constructor (x,y,radius,color,dodgeDistance) {
+  constructor (x,y,radius,rotation,color,dodgeDistance) {
     this.x = x
     this.y = y
     this.radius = radius
+    this.rotation = rotation
+    this.steerSpeed = 3 // 360 % this.steerSpeed must == 0
     this.color = color
     this.dodgeDistance = dodgeDistance
-    this.velocity = { //basically movement speed, //idea // could be upgraded by some way, as a simple engine upgrade, or just make
+    this.velocity = { //basically movement speed, //idea // could be upgraded by some way, as a simple engine upgrade
       x: 0,
       y: 0,
     }
-    this.minVelocity = {
-      x: 0,
-      y: 0,
-    }
-    this.maxVelocity = {
-      x: 3,
-      y: 3,
-    }
+
+    this.maxVel = 3
     this.movingLeft = false
     this.movingRight = false
     this.movingUp = false
     this.movingDown = false
-    this.hidden = false;
-    this.invulnerable = false;
+    this.hidden = false
+    this.invulnerable = false
   }
   draw() {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle= this.color;
-    ctx.lineWidth=7.5;
-    ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2)
+    ctx.save()
+
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi / 180)
+
+
     if(this.invulnerable) {
-      ctx.save()
       ctx.globalAlpha = 0.4;
-      ctx.fillStyle = this.color
-      ctx.fill();
-      ctx.closePath();    
-      ctx.restore()
-    } else {
-      ctx.fillStyle = this.color
-      ctx.fill();
-      ctx.closePath();
     }
-    ctx.restore();
+    ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
+    ctx.restore()
+  }
+
+  drawGhosts() {
+    ghosts.forEach((ghost, index) => {
+      if(ghost.alpha <= 0) {
+       setTimeout(()=>{
+        ghosts.splice(index,1)
+       },0)
+       return
+      }
+      ghost.draw()
+      ghost.alpha -= ghostOpacity / ghostNumber
+    })
+  }
+
+  saveGhost() {
+    ghosts.push(new Ghost(this.x,this.y,this.rotation))
   }
   accelerate() {
-    this.moving = true
-    gsap.fromTo(this.velocity,{
-      x: this.velocity.x,
-      y: this.velocity.y,
-    },{
-      x: this.maxVelocity.x,
-      y: this.maxVelocity.y,
-      duration: 2,
-    })
+    if(!movingForward) return;
+      var rad; 
+      if(this.rotation >= 0 && this.rotation < 90) {
+        rad = (90 - this.rotation) * (pi/180);
+        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/10 )
+        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/10 )
+      }
+
+      if(this.rotation >= 90 && this.rotation < 180) {
+        rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
+        this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel/10 )
+        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/10 )
+      }
+
+      if(this.rotation >= 180 && this.rotation < 270) {
+        rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
+        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/10 )
+        this.velocity.y += Math.abs(Math.sin(rad) * this.maxVel/10 )
+      }
+
+      if(this.rotation >= 270 && this.rotation < 360) {
+        rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
+        this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel/10 )
+        this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel/10 )
+      }
+      // console.log('Ship angle: ' + (rad*180)/pi)
   }
+
   decelerate() {
-    if((this.movingLeft + this.movingRight + this.movingUp + this.movingDown) !== 0) {
-      return
+    if(movingForward) return;
+    
+    if(this.velocity.x !== 0) {
+      var decrease = (0 - this.velocity.x) * 0.04 // the smaller the last number, the slower the return to 1
+      this.velocity.x += decrease
     }
-    gsap.fromTo(this.velocity,{
-      x: this.velocity.x,
-      y: this.velocity.y,
-    },{
-      x: this.minVelocity.x,
-      y: this.minVelocity.y,
-      duration: 2,
-    })
-    // clearTimeout(accelerateTimer)
-    // accelerateTimer = setTimeout(()=> {
-    //   this.movingLeft = false
-    //   this.movingRight = false
-    //   this.movingUp = false
-    //   this.movingDown = false  
-    // },1000)
+    if(this.velocity.y !== 0) {
+      var decrease = (0 - this.velocity.y) * 0.04 // the smaller the last number, the slower the return to 1
+      this.velocity.y += decrease
+    }
+    if(Math.abs(this.velocity.x) < 0.02) {
+      this.velocity.x = 0
+    }
+    if(Math.abs(this.velocity.y) < 0.02) {
+      this.velocity.y = 0
+    }
   }
+  
   move() {
-    if(this.movingLeft) {
-      this.x -= this.velocity.x
+    this.x += this.velocity.x
+    this.y += this.velocity.y
+  }
+
+  steer() {
+    if(turningCCW + turningCW == 0) return;
+
+    // rotate the player sprite to begin with
+    if(turningCCW) {
+      this.rotation -= this.steerSpeed
+      if(this.rotation < 0) this.rotation = 359
     }
-    if(this.movingRight) {
-      this.x += this.velocity.x
-    }
-    if(this.movingUp) {
-      this.y -= this.velocity.y
-    }
-    if(this.movingDown) {
-      this.y += this.velocity.y
+    if(turningCW) {
+      this.rotation += this.steerSpeed
+      if(this.rotation >= 359) this.rotation = 0
+
     }
   }
+
   dodge(direction) {
     // console.log(this.dodgeDistance)
     if(dodgeDir !== null) return;
@@ -223,8 +268,32 @@ class Player {
     
   }
   update() {
+    this.steer()
+    this.accelerate()
     this.move()
     this.draw()
+    this.decelerate()
+    this.saveGhost()
+    this.drawGhosts()
+  }
+}
+
+class Ghost {
+  constructor(x,y,rotation) {
+    this.x = x
+    this.y = y
+    this.rotation = rotation
+    this.alpha = ghostOpacity
+  }
+  draw() {
+    ctx.save()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi / 180)
+
+    ctx.globalAlpha = this.alpha;
+    ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
+
+    ctx.restore()
   }
 }
 
@@ -310,7 +379,7 @@ class Projectile {
   }
   draw() {
     ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2, false)
+    ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
     ctx.fillStyle = this.color
     ctx.fill();
     ctx.closePath();
@@ -324,6 +393,68 @@ class Projectile {
     // this will also need to account for bounces, so each time it bounces, log the projectile position and add the previous distance somewhere to the total distance traveled
   }
 }
+
+class EnemyShip {
+  constructor(x,y,radius,rotation) {
+    this.x = x
+    this.y = y
+    this.radius = radius
+    this.rotation = rotation
+    this.speed = 4
+    this.velocity = {
+      x: 1,
+      y: 1,
+    }
+    this.destroy = false;
+    this.dead = false;
+    this.exploded = false;
+    this.target = 'player';
+    this.changingTarget = false;
+    this.sprite = new Image()
+    this.sprite.src = 'assets/wasp_default.png'
+    this.spriteDim = {
+      x: 128,
+      y: 128,
+    }
+  }
+  draw() {
+    ctx.save()
+    ctx.beginPath()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi / 180)
+    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
+
+    ctx.closePath()
+    ctx.restore()
+  }
+  followPlayer() {
+    // var distance = Math.hypot(player.x - this.x, player.y - this.y) 
+    // console.log(distance)
+
+    var angle = Math.atan2( player.y - this.y, player.x - this.x);
+
+    //idea cool mechanic where the ship is looking at your projectiles
+    // if(projectiles[0]) {
+    //   angle = Math.atan2( projectiles[0].y - this.y, projectiles[0].x - this.x);
+    // }
+    // console.log(angle);
+    this.rotation = 90 + (angle * 180) / pi
+    
+    // console.log('Rotation in deg: ' + this.rotation)
+    gsap.fromTo(this.velocity,{x: this.velocity.x,y: this.velocity.y},{x: Math.cos(angle)*this.speed, y: Math.sin(angle)*this.speed, duration: 1.5})
+    this.x += this.velocity.x
+    this.y += this.velocity.y
+  }
+
+
+
+
+  update() {
+    this.followPlayer()
+    this.draw()
+  }
+}
+
 
 class Enemy {
   constructor(x,y,radius,color,velocity,velInhibition) {
@@ -343,7 +474,7 @@ class Enemy {
   draw() {
     if(this.radius < 1) return;
     ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2, false)
+    ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
     ctx.fillStyle = this.color
     ctx.fill();
     ctx.closePath();
@@ -357,7 +488,7 @@ class Enemy {
     // if player is the closest
     if(distPlayer < distBase) {
       this.target = 'player'
-      if(playerMoved) { //issue // this might break at some point, since this is only run when player is closer to the enemy, but not when the base is closer 
+      if(true) { //issue // this might break at some point, since this is only run when player is closer to the enemy, but not when the base is closer 
         setTimeout(()=>{
           var angle = Math.atan2( player.y - this.y, player.x - this.x);
           gsap.fromTo(this.velocity,{x: this.velocity.x,y: this.velocity.y},{x: Math.cos(angle)*enemySpeed, y: Math.sin(angle)*enemySpeed, duration: 1})
@@ -445,7 +576,7 @@ class Particle {
     ctx.save()
     ctx.globalAlpha = this.alpha / 100;
     ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2, false)
+    ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
     ctx.fillStyle = this.color
     ctx.fill();
     ctx.closePath();
@@ -476,7 +607,7 @@ class Explosion {
     ctx.save()
     ctx.globalAlpha = this.life / this.lifeinit
     ctx.beginPath()
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI * 2, false)
+    ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
     ctx.fillStyle = this.color
     ctx.fill();
     ctx.closePath();
@@ -498,7 +629,7 @@ class Base {
   }
   draw() {
     ctx.beginPath()
-    ctx.arc(centerX,centerY,this.radius,0, Math.PI*2, false)
+    ctx.arc(centerX,centerY,this.radius,0, pi*2, false)
     ctx.fillStyle = this.color
     ctx.fill()
     ctx.closePath()
@@ -577,7 +708,11 @@ function spawnEnemy() {
   
 }
 
-function init() { //this is a hard reset, this resets everything to the initial state
+function spawnEnemyShip() {
+  enemyships.push(new EnemyShip(centerX,centerY,50,0))
+}
+
+function init() { //this is a hard reset, this resets (almost) everything to the initial state
   
   gameover = false
   
@@ -620,11 +755,9 @@ function init() { //this is a hard reset, this resets everything to the initial 
   cancelAnimationFrame(drawId);
   draw()
   
-  // clearInterval(enemySpawnTimer);
-  // enemySpawnTimer = setInterval(() => {
-  //   spawnEnemy();
-  // },1000);
-  console.log('enemy spawning disabled')
+
+  spawnEnemyShip()
+
   updateScoreVisual();
   updateAmmoVisual()
 }
@@ -650,8 +783,8 @@ let projectiles = [];
 let enemies = [];
 let particles = [];
 let explosions = [];
-
-let projRadius = 7;
+let enemyships = [];
+let projRadius = 5;
 let projectileSpeed = 9;
 let shrapnelRadiusMult = 1.5;
 let cannonballRadiusMult = 4;
@@ -666,7 +799,7 @@ let machineFireRate = 12
 let explosionColor = 'orange';
 let explosionRadius = 220;
 
-const player = new Player(centerX, centerY, 20, 'white', {x: dodgeDistance, y: dodgeDistance})
+const player = new Player(centerX, centerY, 20,0, 'white', {x: dodgeDistance, y: dodgeDistance})
 let mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHealth)
 
 
@@ -765,6 +898,10 @@ function fire(e) {
   // spawnProjectile(e)
   updateAmmoVisual();
 
+  //fire animation prototype
+  fired = true;
+  firedFadeout = 10;
+
 }
 function spawnProjectile(e) {
   const angle = Math.atan2( e.clientY - player.y, e.clientX - player.x);
@@ -776,16 +913,20 @@ function spawnProjectile(e) {
 }
 
 function drawBackground() {
+  ctx.save()
   ctx.beginPath();
+  // ctx.filter = 'blur(2px)'
   ctx.rect(0,0,canvas.width,canvas.height)
-  ctx.fillStyle = 'hsl(0,0%,2%)'
+  ctx.fillStyle = 'hsla(0,0%,2%,1)'
   ctx.fill()
   ctx.closePath();
+  // ctx.drawImage(canvas,0,0,cw,ch)
+  ctx.restore()
 }
 
 function drawCursor() {
   ctx.beginPath();
-  ctx.arc(mouseX,mouseY,cursorRadius,0,Math.PI * 2, false)
+  ctx.arc(mouseX,mouseY,cursorRadius,0,pi * 2, false)
   ctx.strokeStyle = 'hsl(0,100%,100%)'
   ctx.stroke()
   ctx.closePath();
@@ -1138,7 +1279,9 @@ function draw() {
       particles.splice(index,1)
     }
   })
-  
+  enemyships.forEach((ship, index) => {
+    ship.update()
+  })
   //spawning mechanic
   if(enemies.length >= 12) {
     reachedEnemyCap = true;
@@ -1189,9 +1332,9 @@ function draw() {
       }
     })
   })
-
-
+  
   //player mechanics
+  
   player.update();
   
   if(pressedShift) {
@@ -1208,8 +1351,18 @@ function draw() {
       overlaysInfo.splice(index,1)
     }
   })
-  drawCursor();
 
+  // bullet fire anim
+  if(fired) {
+    drawFireAnim();
+    // clearTimeout(firedTimer);
+    firedTimer = setTimeout(()=>{
+      fired = false
+    },100)
+  }
+  // cursor, draw this last
+  drawCursor();
+  
   // optimizations
   if(particles.length > 60) {
     setTimeout(()=>{
@@ -1222,7 +1375,14 @@ function draw() {
   if(gameover) cancelAnimationFrame(drawId);
 }
 // ↑↑↑↑↑↑ end of draw()
-
+function drawFireAnim() {
+  ctx.beginPath()
+  ctx.arc(player.x,player.y,10,0, pi*2, false)
+  ctx.strokeStyle = `hsla(0,0%,100%,${0 + 0.1 * firedFadeout})`
+  ctx.stroke()
+  ctx.closePath()
+  if(firedFadeout > 0) firedFadeout--
+}
 function initBackground() {
   ctx.beginPath();
   ctx.rect(0,0,canvas.width,canvas.height)
@@ -1253,11 +1413,11 @@ function getColor(arg) {
   }
 }
 function getProjectileColor() {
-  if (currentAmmoType == 'regular') return 'lightblue'
-  if (currentAmmoType == 'shrapnel') return 'hsl(0,0%,65%)'
-  if (currentAmmoType == 'cannonball') return 'hsl(0,0%,45%)'
+  if (currentAmmoType == 'regular') return 'hsl(221, 100%, 80%)'
+  if (currentAmmoType == 'shrapnel') return 'hsl(221, 100%, 80%)'
+  if (currentAmmoType == 'cannonball') return 'hsl(221, 100%, 80%)'
   if (currentAmmoType == 'explosive') return 'orange'
-  if (currentAmmoType == 'machine') return 'hsl(234,10%,80%)'
+  if (currentAmmoType == 'machine') return 'hsl(221, 100%, 80%)'
 }
 
 function calcHypotenuse(a, b) {
@@ -1275,7 +1435,6 @@ function start() {
 
   `))
   
-  // bgMusic.play()
 }
 function endGame() {
   gameover = true;
@@ -1283,6 +1442,10 @@ function endGame() {
   openModal('gameover')
 }
 
+function freeze() {
+  cancelAnimationFrame(drawId)
+  canvas.style.cursor = 'initial'
+}
 
 //keydown
 document.addEventListener('keydown', processKeydown, false)
@@ -1292,7 +1455,9 @@ function processKeydown(e) {
     start();
   }
   if(e.code == 'KeyE' ) {
-    endGame()
+    // endGame() 
+    freeze()
+    //basically pause but hardcore //idea this game needs a pause button
   }
   if(e.code == 'KeyF' ) {
     detonate()
@@ -1304,45 +1469,60 @@ function processKeydown(e) {
     pressedShift = true
     // console.log('[Shift] down')
     setDodgeOrigin();
+    prepareDodge();
   }
 
-  if(!pressedShift) {
-    if(e.code == 'KeyA') {
-      player.movingLeft = true
-      player.accelerate()
-    }
-    if(e.code == 'KeyD') {
-      player.movingRight = true
-      player.accelerate()
-    }
-    if(e.code == 'KeyW') {
-      player.movingUp = true
-      player.accelerate()
-    }
-    if(e.code == 'KeyS') {
-      player.movingDown = true
-      player.accelerate()
-    }
+  // if(!pressedShift) {
+  //   if(e.code == 'KeyA') {
+  //     player.movingLeft = true
+  //     player.accelerate()
+  //   }
+  //   if(e.code == 'KeyD') {
+  //     player.movingRight = true
+  //     player.accelerate()
+  //   }
+  //   if(e.code == 'KeyW') {
+  //     player.movingUp = true
+  //     player.accelerate()
+  //   }
+  //   if(e.code == 'KeyS') {
+  //     player.movingDown = true
+  //     player.accelerate()
+  //   }
+  // }
+
+  // if(pressedShift) {
+  //   if(e.code == 'KeyA') {
+  //     pressedLeft = true
+  //     prepareDodge()
+  //   }
+  //   if(e.code == 'KeyD') {
+  //     pressedRight = true
+  //     prepareDodge()
+  //   }
+  //   if(e.code == 'KeyW') {
+  //     pressedUp = true
+  //     prepareDodge()
+  //   }
+  //   if(e.code == 'KeyS') {
+  //     pressedDown = true
+  //     prepareDodge()
+  //   }
+  // }
+
+  if(e.code == 'KeyA') {
+    turningCCW = true
+  }
+  if(e.code == 'KeyD') {
+    turningCW = true
+  }
+  if(e.code == 'KeyW') {
+    movingForward = true
+  }
+  if(e.code == 'KeyS') {
+    movingBackward = true
   }
 
-  if(pressedShift) {
-    if(e.code == 'KeyA') {
-      pressedLeft = true
-      prepareDodge()
-    }
-    if(e.code == 'KeyD') {
-      pressedRight = true
-      prepareDodge()
-    }
-    if(e.code == 'KeyW') {
-      pressedUp = true
-      prepareDodge()
-    }
-    if(e.code == 'KeyS') {
-      pressedDown = true
-      prepareDodge()
-    }
-  }
   if(e.code == 'KeyC') {
     cycleAmmo('normal');
   }
@@ -1352,34 +1532,43 @@ function processKeydown(e) {
 document.addEventListener('keyup', processKeyup, false)
 
 function processKeyup(e) {
+
   if(e.code == 'ShiftLeft') {
     pressedShift = false
     // clearInterval(dodgeWindow)
-
   }
+
+  // if(e.code == 'KeyA') {
+  //   player.movingLeft = false
+  //   pressedLeft = false
+  //   // player.decelerate()
+  // }
+  // if(e.code == 'KeyD') {
+  //   player.movingRight = false
+  //   pressedRight = false
+  //   // player.decelerate()
+  // }
+  // if(e.code == 'KeyW') {
+  //   player.movingUp = false
+  //   pressedUp = false
+  //   // player.decelerate()
+  // }
+  // if(e.code == 'KeyS') {
+  //   player.movingDown = false
+  //   pressedDown = false
+  //   // player.decelerate()
+  // }
   if(e.code == 'KeyA') {
-    player.movingLeft = false
-    pressedLeft = false
-    player.decelerate()
-    // prepareDodge()
+    turningCCW = false
   }
   if(e.code == 'KeyD') {
-    player.movingRight = false
-    pressedRight = false
-    player.decelerate()
-    // prepareDodge()
+    turningCW = false
   }
   if(e.code == 'KeyW') {
-    player.movingUp = false
-    pressedUp = false
-    player.decelerate()
-    // prepareDodge()
+    movingForward = false
   }
   if(e.code == 'KeyS') {
-    player.movingDown = false
-    pressedDown = false
-    player.decelerate()
-    // prepareDodge()
+    movingBackward = false
   }
 }
 
@@ -1395,19 +1584,7 @@ function prepareDodge() {
   if(!pressedShift) {
     console.log('Dodge canceled.')
   }
-  //check if only two are active and more than one is active
-  if(
-    ((+pressedLeft + +pressedRight + +pressedDown + +pressedUp) > 2 &&
-    (+pressedLeft + +pressedRight + +pressedDown + +pressedUp) < 1) 
-    ||
-    pressedLeft && pressedRight 
-    ||
-    pressedUp && pressedDown
-    ) {
-      console.log('Cannot call player.dodge(), directions are invalid or dodge canceled.')
-      return
-  }
-
+  
   clearTimeout(dodgeWindow)
   var direction;
 
@@ -1440,16 +1617,6 @@ function prepareDodge() {
   if(pressedDown && pressedRight) {
     direction = 'downRight'
   }
-
-  if((+pressedLeft + +pressedRight + +pressedDown + +pressedUp) > 1) {
-    dodgeWindow = setTimeout(()=>{
-      player.dodge(direction)
-    },20)
-  } else {
-    dodgeWindow = setTimeout(()=>{
-      player.dodge(direction)
-    },120)
-  }
 }
 function dodgeFinish() {
   dodgeDir = null;
@@ -1472,7 +1639,7 @@ function displayDodgePositions() {
     dodgeOrigin.y,
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1485,7 +1652,7 @@ function displayDodgePositions() {
     dodgeOrigin.y,
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1498,7 +1665,7 @@ function displayDodgePositions() {
     dodgeOrigin.y + player.dodgeDistance.y,
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1511,7 +1678,7 @@ function displayDodgePositions() {
     dodgeOrigin.y - player.dodgeDistance.y,
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1524,7 +1691,7 @@ function displayDodgePositions() {
     dodgeOrigin.y - (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1537,7 +1704,7 @@ function displayDodgePositions() {
     dodgeOrigin.y + (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1550,7 +1717,7 @@ function displayDodgePositions() {
     dodgeOrigin.y - (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1563,7 +1730,7 @@ function displayDodgePositions() {
     dodgeOrigin.y + (player.dodgeDistance.y / 1.414),
     player.radius,
     0,
-    Math.PI * 2, 
+    pi * 2, 
     false
     )
   ctx.stroke();
@@ -1730,37 +1897,37 @@ function displayPopup(arg, x, y) {
 
 //neon effect experiment
 
-var drawRectangle = function(x, y, w, h, border){
-  ctx.beginPath();
-  ctx.moveTo(x+border, y);
-  ctx.lineTo(x+w-border, y);
-  ctx.quadraticCurveTo(x+w-border, y, x+w, y+border);
-  ctx.lineTo(x+w, y+h-border);
-  ctx.quadraticCurveTo(x+w, y+h-border, x+w-border, y+h);
-  ctx.lineTo(x+border, y+h);
-  ctx.quadraticCurveTo(x+border, y+h, x, y+h-border);
-  ctx.lineTo(x, y+border);
-  ctx.quadraticCurveTo(x, y+border, x+border, y);
-  ctx.closePath();
-  ctx.stroke();
-}
-var neonRect = function(x,y,w,h,r,g,b){
-ctx.shadowColor = "rgb("+r+","+g+","+b+")";
-ctx.shadowBlur = 10;
-ctx.strokeStyle= "rgba("+r+","+g+","+b+",0.2)";
-ctx.lineWidth=7.5;
-drawRectangle(x,y,w,h,1.5);
-};
+// var drawRectangle = function(x, y, w, h, border){
+//   ctx.beginPath();
+//   ctx.moveTo(x+border, y);
+//   ctx.lineTo(x+w-border, y);
+//   ctx.quadraticCurveTo(x+w-border, y, x+w, y+border);
+//   ctx.lineTo(x+w, y+h-border);
+//   ctx.quadraticCurveTo(x+w, y+h-border, x+w-border, y+h);
+//   ctx.lineTo(x+border, y+h);
+//   ctx.quadraticCurveTo(x+border, y+h, x, y+h-border);
+//   ctx.lineTo(x, y+border);
+//   ctx.quadraticCurveTo(x, y+border, x+border, y);
+//   ctx.closePath();
+//   ctx.stroke();
+// }
+// var neonRect = function(x,y,w,h,r,g,b){
+// ctx.shadowColor = "rgb("+r+","+g+","+b+")";
+// ctx.shadowBlur = 10;
+// ctx.strokeStyle= "rgba("+r+","+g+","+b+",0.2)";
+// ctx.lineWidth=7.5;
+// drawRectangle(x,y,w,h,1.5);
+// };
 
-function addGlow(x, y){
-  ctx.globalCompositeOperation = "lighter";
-  neonRect(25+x,25+y,50,50,243,243,21);
-  neonRect(225-x,25+y,50,50,193,253,51);
-  neonRect(25+x,225-y,50,50,255,153,51);
-  neonRect(225-x,225-y,50,50,252,90,184);
-  neonRect(125,125,50,50,13,213,252); 
-  ctx.globalCompositeOperation = "normal";
-}
+// function addGlow(x, y){
+//   ctx.globalCompositeOperation = "lighter";
+//   neonRect(25+x,25+y,50,50,243,243,21);
+//   neonRect(225-x,25+y,50,50,193,253,51);
+//   neonRect(25+x,225-y,50,50,255,153,51);
+//   neonRect(225-x,225-y,50,50,252,90,184);
+//   neonRect(125,125,50,50,13,213,252); 
+//   ctx.globalCompositeOperation = "normal";
+// }
 
 function detonate() {
   projectiles.forEach((projectile,index)=> {
@@ -1814,26 +1981,31 @@ let map = {
   x: 8,
   y: 8,
 }
-
+let layoutSuccess = null;
 let rooms = []
 let currRoom = null
 let roomIndex = 0 // only used for generating so far
 
 function generateLayout() {
+  var attempts = 0;
+  // generate a random location of the entrance
   var x = Math.round(Math.random() * map.x -0.5)
   var y = Math.round(Math.random() * map.y -0.5)
-
-  // entrance is picked randomly
   rooms.push(new Room(x,y,'entrance', 'wall', 'wall', 'wall', 'wall'))
-  // roomIndex++
-
+  
   // add additional 6-8 rooms, making the main branch 6-9 rooms total
   // this ia  fucking mess but it moreorless doesn't matter, it's just a matter of keeping indexing consistent ↓↓↓↓↓
-
+  
   var roomNum = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6 //issue //i have no idea how the room index works anymore
   console.log('Total room number: ' + roomNum)
   if(roomNum >= 10) roomNum = 9 // hard set the roomnum if it actually overflows
   while(roomIndex < roomNum - 1) {
+    attempts++
+    if(attempts > 50) {
+      setTimeout(()=>{generateSector()},10)
+      break
+    }
+
     var dir = Math.round(Math.random() * 4 - 0.5)
     var prevRoom = rooms[roomIndex]
     var thisRoom = {
@@ -1848,50 +2020,64 @@ function generateLayout() {
     if(dir === 0) { // left
       roomX = prevRoom.x - 1
       roomY = prevRoom.y
-      prevRoom.left = 'portal'
-      thisRoom.right = 'portal'
     }
     else
     if(dir === 1) { // right
       roomX = prevRoom.x + 1
       roomY = prevRoom.y
-      prevRoom.right = 'portal'
-      thisRoom.left = 'portal'
     }
     else
     if(dir === 2) { // up
       roomX = prevRoom.x
       roomY = prevRoom.y - 1
-      prevRoom.top = 'portal'
-      thisRoom.bottom = 'portal'
     }
     else
     if(dir === 3) { // down
       roomX = prevRoom.x
       roomY = prevRoom.y + 1
-      prevRoom.bottom = 'portal'
-      thisRoom.top = 'portal'
     }
+
     if(roomX < 0 || roomY < 0 || roomX > (map.x - 1) || roomY > (map.y - 1)) {
       console.log('Room outside of map bounds.')
       continue
     }
-    // var dup = rooms.find(room => room.x == roomX && room.y == roomY)
-    // console.log(dup)
+
     if(rooms.find(room => room.x == roomX && room.y == roomY)) {
       console.log('This room position is already occupied.')
       continue
+    }
+
+    if(dir === 0) { // left
+      prevRoom.left = 'portal'
+      thisRoom.right = 'portal'
+    }
+    else
+    if(dir === 1) { // right
+      prevRoom.right = 'portal'
+      thisRoom.left = 'portal'
+    }
+    else
+    if(dir === 2) { // up
+      prevRoom.top = 'portal'
+      thisRoom.bottom = 'portal'
+    }
+    else
+    if(dir === 3) { // down
+      prevRoom.bottom = 'portal'
+      thisRoom.top = 'portal'
     }
     rooms.push(new Room(roomX, roomY, 'normal',thisRoom.left,thisRoom.right,thisRoom.top,thisRoom.bottom))
     roomIndex++
     console.log(roomIndex)
   }
+
   currRoom = rooms[0]
-  var sideBranches = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6
+  var sideBranches = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6 //unfinished
+  layoutSuccess = true
 }
 
 function generateMap() {
-  //make the empty rooms
+  // make the empty rooms
   for (let i = 0; i < map.x * map.y; i++) {
     var room = document.createElement("div");
     room.classList.add("room");
@@ -1915,16 +2101,27 @@ function generateMap() {
   
 }
 
+function initSectorVars() {
+  rooms = []
+  currRoom = null
+  roomIndex = 0
+}
+
 function clearMap() {
   sectorMap.innerHTML = '' //issue // this is bad code, this will break if i add anything to the sector map
 }
 
 function generateSector() {
+  initSectorVars()
   clearMap()
   generateLayout()
-  generateMap()
-  updateRoomVisual()
-  updateArrows()
+  if(layoutSuccess) {
+    generateMap()
+    updateRoomVisual()
+    updateArrows()
+    updateMapVisual(currRoom)
+  }
+  layoutSuccess = null
 }
 
 function travel(x,y) {
@@ -1952,12 +2149,20 @@ function teleport() {
   console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
   console.log(currRoom)
   updateRoomVisual()
+  updateArrows()
+  updateMapVisual(currRoom)
 }
 function updateMapVisual(currRoom) {
   var index = (currRoom.x + 0) + (currRoom.y + 0) *8
   var rooms = Array.from(document.querySelectorAll('.room'))
+  rooms.forEach(room => {
+   if(room.firstChild) room.firstChild.style.borderColor = ''
+  })
+  rooms[index].firstChild.style.borderColor = 'orange'
 }
-
+//math functions
+function ctg(x) { return 1 / Math.tan(x); }
+function arcctg(x) { return pi / 2 - Math.atan(x); }
 
 // audio
 

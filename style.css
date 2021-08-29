@@ -144,8 +144,9 @@ body {
 }
 
 .dummy {
-  color: rgb(56, 39, 218);
-  color: rgb(223, 43, 97);
+  color: hsl(221, 100%, 61%);
+  color: hsl(246, 71%, 50%);
+  color: hsl(342, 74%, 52%);
 }
 
 .overlay-main {
@@ -257,4 +258,5 @@ body {
   width: 100%;
   height: 100%;
   border: 3px solid white;
+  color: white;
 }
