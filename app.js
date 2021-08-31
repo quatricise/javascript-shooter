@@ -1,11 +1,31 @@
 const canvas = document.querySelector('#canvas');
 const ctx = canvas.getContext("2d");
 
+const canvasBg = document.querySelector('#canvas-bg');
+const ctxBg = canvasBg.getContext('2d');
+
+const canvasFx = document.querySelector('#canvas-fx');
+const ctxFx = canvasFx.getContext('2d');
+
 const pi = Math.PI
 
-let shipSprite = new Image(); //issue i think the ship sprite should be contained within Player class
-shipSprite.src = 'assets/moth_default.png'
-let shipSize = 128;
+canvas.width = canvasBg.width = canvasFx.width = window.innerWidth
+canvas.height = canvasBg.height = canvasFx.height = window.innerHeight
+
+
+let cw = canvas.width //idea replace the lenghty canvas.width with cw // this can be used for both canvases just fine
+let ch = canvas.height
+
+window.onresize = function() {
+  canvas.width = canvasBg.width = canvasFx.width = window.innerWidth
+  canvas.height = canvasBg.height = canvasFx.height = window.innerHeight
+  centerX = canvas.width/2;
+  centerY = canvas.height/2;
+  cw = canvas.width 
+  ch = canvas.height
+}
+
+let debug = false;
 
 let ghosts = []
 let ghostNumber = 5
@@ -21,6 +41,14 @@ let scoreDialog = document.querySelector('#score-dialog')
 let wavesDialog = document.querySelector('#waves-dialog')
 
 let mapContainer = document.querySelector('#map-container')
+let mapIcon = document.querySelector('.map-icon')
+let mapOpen = false;
+let inventoryOpen = false;
+let inventoryContainer = document.querySelector('#inventory-container')
+let invIcon = document.querySelector('.inv-icon');
+
+let shipSelectCont = document.querySelector('.ship-select-cont')
+
 let arrowContainer = document.querySelector('#arrow-container')
 let dialogContainer = document.querySelector('#dialog-container')
 
@@ -33,39 +61,29 @@ arrows[2].direction = 'up'
 arrows[3].direction = 'down'
 let dispAmmoRegular = document.querySelector('#ammo-regular')
 let dispAmmoShrapnel = document.querySelector('#ammo-shrapnel')
-let dispAmmoCannonball = document.querySelector('#ammo-cannonball')
+let dispAmmoCannon = document.querySelector('#ammo-cannon')
 let dispAmmoExplosive = document.querySelector('#ammo-explosive')
 let dispAmmoMachine = document.querySelector('#ammo-machine')
 
 let ammoSpriteRegular = document.querySelector('.ammo.regular')
 let ammoSpriteShrapnel = document.querySelector('.ammo.shrapnel')
-let ammoSpriteCannonball = document.querySelector('.ammo.cannonball')
+let ammoSpriteCannon = document.querySelector('.ammo.cannon')
 let ammoSpriteExplosive = document.querySelector('.ammo.explosive')
 let ammoSpriteMachine = document.querySelector('.ammo.machine')
 
 let healthbar = document.querySelector('.healthbar')
-let healthSegments = Array.from(document.querySelectorAll('.armor-segment'))
+// let healthSegments = Array.from(document.querySelectorAll('.armor-segment'))
+let healthSegments = []
+
+
 let overlayMain = document.querySelector('.overlay-main')
 let overlaysInfo = [];
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
 
 let dialogs = []
 let deadShipDialogs = []
 
-
-let cw = canvas.width //idea replace the lenghty canvas.width with cw
-let ch = canvas.height
 let drawId = null;
 
-window.onresize = function() {
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
-  centerX = canvas.width/2;
-  centerY = canvas.height/2;
-  cw = canvas.width 
-  ch = canvas.height
-}
 let energy = 100; //idea //this could be used for the jumps, they consume energy, which has to be recovered
 let pressedShift = false;
 let pressedCtrl = false;
@@ -99,7 +117,7 @@ let gameover = false;
 let score = 0;
 let ammoRegular = 0
 let ammoShrapnel = 0
-let ammoCannonball = 0
+let ammoCannon = 0
 let ammoExplosive = 0
 let ammoMachine = 0
 let ammoTotal = 0;
@@ -115,68 +133,249 @@ let waveNumber = 1;
 let waveActive = false;
 
 
+let centerX = canvas.width/2
+let centerY = canvas.height/2
+let mouseX
+let mouseY
 
+let dodgeDistance = 300
+let minDodge = 200
+let cursorRadius = 10
+let playerMoved = false
+let dodgeSpeed = 0.05
+let dodgeSpeedMod = dodgeDistance; // interesting idea
+let dodgeResizing = false
+
+let baseHealth = 500;
+let baseRadius = 80;
+
+let projectiles = []
+let projectileGhosts = []
+let enemies = []
+let enemyProjectiles = []
+let particles = []
+let explosions = []
+let enemyships = []
+let asteroids = []
+let debriss = []
+
+const projRadius = 5
+const projectileSpeed = 9
+let shrapnelRadiusMult = 1.5
+let cannonRadiusMult = 4
+let explosiveRadiusMult = 1.6
+let enemyRadius = 40
+let enemySpeed = 1
+let particleRadius = 3
+let particleVariance = 3
+let particleSpeed = 4
+let friction = 0.999 // global friction variable, not exactly sure where it's used
+let machineFireRate = 12
+let explosionColor = 'orange'
+let explosionRadius = 220
+
+let weapons = {
+  gunBasic: {
+    power: 1,
+    ammo: 50,
+  },
+  missile_M1: {
+    power: 5,
+    ammo: 50,
+    explosive: true,
+  },
+}
+
+let ships = {
+  moth: {
+    name: 'M0-TH',
+    visual: {
+      base: 'assets/moth_default.png',
+      turret: 'assets/moth_default_turret.png',
+      dashInd: 'assets/moth_default_dash_indicator.png',
+      dimX: 128,
+      dimY: 128,
+    },
+    agility: 2.5,
+    armor: 8,
+    dodgeDistance: {
+      x: dodgeDistance,
+      y: dodgeDistance,
+    },
+    maxDodge: 550,
+    maxVel: 3,
+    steerSpeed: 3,
+    reactorPower: 2,
+    energyMax: 10,
+    weapons: {
+      gunBasic: {
+        power: 1,
+        ammo: 50,
+      }
+    },
+    weight: 25,
+    impactResist: 4,
+    shields: {
+      cost: 5,
+      strenght: 2,
+      radius: 80,
+      active: false,
+    },
+    dashTimerMax: 45,
+  },
+  wasp: {
+    name: 'WASP-110',
+    visual: {
+      base: 'assets/wasp_default.png',
+      turret: null,
+      dashInd: 'assets/wasp_default_dash_indicator.png',
+      dimX: 128,
+      dimY: 128,
+    },
+    agility: 1.8,
+    armor: 10,
+    dodgeDistance: {
+      x: dodgeDistance,
+      y: dodgeDistance,
+    },
+    maxDodge: 650,
+    maxVel: 3,
+    steerSpeed: 3.5,
+    reactorPower: 2,
+    energyMax: 10,
+    weapons: {
+      gunBasic: {
+        power: 1,
+        ammo: 50,
+      }
+    },
+    weight: 25,
+    impactResist: 6,
+    shields: {
+      cost: 5,
+      strenght: 2,
+      radius: 80,
+      active: false,
+    },
+    dashTimerMax: 50,
+  },
+
+  cargo: {
+    name: 'Cargo Ship Class I',
+    visual: {
+      base: 'assets/cargo_ship_small.png',
+      turret: null,
+      dashInd: null,
+      dimX: 128,
+      dimY: 128,
+    },
+    agility: 1.2,
+    armor: 12,
+    dodgeDistance: {
+      x: dodgeDistance,
+      y: dodgeDistance,
+    },
+    maxDodge: 350,
+    maxVel: 2,
+    steerSpeed: 1.2,
+    reactorPower: 4,
+    energyMax: 30,
+    weapons: {},
+    weight: 25,
+    impactResist: 3,
+    shields: {
+      cost: 10,
+      strenght: 5,
+      radius: 120,
+      active: false,
+    },
+    dashTimerMax: 50,
+  },
+}
 //classes
-class Player {
-  constructor (x,y,radius,rotation,color,dodgeDistance) {
+class Ship {
+  constructor (x,y,radius,rotation,shipData) {
+
+    //properties from shipData, unique per ship
+    this.name = shipData.name
+    this.maxVel = shipData.maxVel //unfinished this will determine the maximum speed the ship can reach
+    this.dodgeDistance = shipData.dodgeDistance
+    this.maxDodge = shipData.maxDodge
+    this.steerSpeed = shipData.steerSpeed // 360 % this.steerSpeed == 0 , otherwise not good
+    this.reactorPower = shipData.reactorPower
+    this.energyMax = shipData.energyMax
+    this.weapons = shipData.weapons
+    this.agility = shipData.agility //idea ,this influences the change in velocity when dashing
+    this.shields = shipData.shields
+    this.impactResist = shipData.impactResist
+    this.weight = shipData.weight
+    this.armor = shipData.armor
+    console.log('Player armor after initializing: ' + this.armor)
+
+    this.dashTimerMax = shipData.dashTimerMax
+    this.visual = shipData.visual
+    this.sprite = new Image()
+    this.sprite.src = this.visual.base
+    this.dashInd = null
+    if(this.visual.dashInd) {
+      this.dashInd = new Image()
+      this.dashInd.src = this.visual.dashInd
+    }
+    this.turret = null
+    if(this.visual.turret) {
+      this.turret = new Image()
+      this.turret.src = this.visual.turret
+      this.turretDimX = this.dimX
+      this.turretDimY = this.dimY
+      this.turretRotation = 0
+    }
+
+    // universal properties initialized for each ship
+    this.glowSprite = new Image()
+    this.glowSprite.src = 'assets/ship_glow.png'
+
+    this.dimX = this.visual.dimX
+    this.dimY = this.visual.dimY
     this.x = x
     this.y = y
     this.radius = radius
     this.rotation = rotation
-    this.steerSpeed = 3 // 360 % this.steerSpeed must == 0
-    this.color = color
-    this.dodgeDistance = dodgeDistance
+    this.steerWindupMax = 8
+    this.steerWindup = this.steerWindupMax
+    this.energy = this.energyMax
     this.velocity = { //basically movement speed, //idea // could be upgraded by some way, as a simple engine upgrade
       x: 0,
       y: 0,
     }
 
-    this.maxVel = 3
-    this.movingLeft = false
-    this.movingRight = false
-    this.movingUp = false
-    this.movingDown = false
-    this.hidden = false
+    this.hidden = false // cloaking idea, perhaps that will be reworked into a % based cloak
     this.invulnerable = false
-
-    this.weight = 25
-    this.impactResistance = 5
-    this.armor = 8
-    this.spriteDim = {
-      x: 128,
-      y: 128
-    }
-    this.turret = new Image()
-    this.turret.src = 'assets/moth_default_turret.png'
-    this.turretDim = this.spriteDim
-    this.turretRotation = 0
-
-    this.dashInd = new Image()
-    this.dashInd.src = 'assets/moth_default_dash_indicator.png'
-
-    this.reactorPower = 2 //idea, try the reactor power now, so i know whether that's something interesting for the game
-    this.powerMax = 10 //im not sure what these numbers mean just yet
-    this.power = 10
-
     this.dashTimer = 0 //idea it should go up to around 30 or 40 so you can dash once a second just fine
-
-    this.currentWeapons = [
-      {
-        key: 'regular',
-        ammo: 20
-      },
-    ]
+    this.stuck = false
+    this.inDanger = false;
   }
   draw() {
+    // just test drawing some kinda shields
+    if(this.shields.active) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(this.x,this.y,this.shields.radius,0,pi*2,false)
+      ctx.strokeStyle = 'hsla(214, 80%, 68%, 0.4)'
+      ctx.lineWidth = 3
+      ctx.stroke()
+      ctx.restore()
+    }
+
     //idea blue glow behind ship
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(this.x,this.y,60,0,pi*2,false)
-    ctx.fillStyle = 'hsla(246, 71%, 50%, 0.75)'
-    ctx.filter = 'blur(70px)'
-    ctx.fill()
-    ctx.closePath()
-    ctx.restore()
+    ctxBg.drawImage(this.glowSprite,this.x - this.dimX,this.y - this.dimY,this.dimX*2,this.dimY*2)
+    // ctxBg.save()
+    // ctxBg.beginPath()
+    // ctxBg.arc(this.x,this.y,60,0,pi*2,false)
+    // ctxBg.fillStyle = 'hsla(246, 71%, 50%, 0.75)'
+    // ctxBg.filter = 'blur(70px)'
+    // ctxBg.fill()
+    // ctxBg.closePath()
+    // ctxBg.restore()
 
 
     //draw ship body and dash indicator
@@ -190,24 +389,35 @@ class Player {
       ctx.globalAlpha = 0.4;
       ctx.filter = 'saturate(0)'
     }
-    ctx.drawImage(shipSprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2, this.spriteDim.x, this.spriteDim.y)
-    ctx.globalAlpha = 1 / (this.dashTimer/7)
-    ctx.drawImage(this.dashInd, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2, this.spriteDim.x, this.spriteDim.y)
+    ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+
+    if(this.dashInd) {
+      ctx.globalAlpha = 1 / (this.dashTimer/7)
+      ctx.drawImage(this.dashInd, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+    }
     ctx.globalAlpha = 1
     ctx.restore()
 
     //draw turret
-    this.rotateTurret()
-    ctx.save()
-    ctx.translate(this.x,this.y)
-    ctx.rotate(this.turretRotation * pi / 180)
-    if(this.invulnerable) {
-      ctx.globalAlpha = 0.4;
-      ctx.filter = 'saturate(0)'
+    if(this.turret) {
+      this.rotateTurret()
+      ctx.save()
+      ctx.translate(this.x,this.y)
+      ctx.rotate(this.turretRotation * pi / 180)
+      if(this.invulnerable) {
+        ctx.globalAlpha = 0.4;
+        ctx.filter = 'saturate(0)'
+      }
+      ctx.drawImage(this.turret, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+      ctx.restore()
     }
-    ctx.drawImage(this.turret, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2, this.spriteDim.x, this.spriteDim.y)
-    ctx.restore()
 
+  }
+  toggleShields() {
+    if(this.shields.active) {
+      this.shields.active = false
+    }
+    else this.shields.active = true
   }
   rotateTurret() {
     var angle = Math.atan2(player.y - mouseY, player.x - mouseX);
@@ -227,7 +437,7 @@ class Player {
   }
 
   saveGhost() {
-    ghosts.push(new Ghost(this.x,this.y,this.rotation))
+    ghosts.push(new Ghost(this.x,this.y,this.rotation,this.sprite))
   }
   accelerate() {
     if(!movingForward) return;
@@ -262,7 +472,7 @@ class Player {
       }
       // console.log('Ship angle: ' + (rad*180)/pi)
 
-      //isssue, this doesn't work as it creates the infamous diagonal movement == faster
+      //issue - limiting velocity: this doesn't work as it creates the infamous diagonal movement == faster
       // if(this.velocity.x > this.maxVel) {
       //   this.velocity.x = this.maxVel
       // }
@@ -296,17 +506,24 @@ class Player {
   }
 
   steer() {
-    if(turningCCW + turningCW == 0) return;
-
-    // rotate the player sprite to begin with
+    if(!turningCCW && !turningCW && this.steerWindup < this.steerWindupMax) {
+      this.steerWindup++
+    }
+    if(!turningCCW && !turningCW && this.steerWindup == this.steerWindupMax) {
+      return
+    }
+    
+    // rotate the player sprite
     if(turningCCW) {
-      this.rotation -= this.steerSpeed
+      this.rotation -= this.steerSpeed / (1 + (this.steerWindup/4))
       if(this.rotation < 0) this.rotation = 359
     }
     if(turningCW) {
-      this.rotation += this.steerSpeed
+      this.rotation += this.steerSpeed / (1 + (this.steerWindup/4))
       if(this.rotation >= 359) this.rotation = 0
-
+    }
+    if(this.steerWindup > 0 && (turningCW || turningCCW)) {
+      this.steerWindup--
     }
   }
 
@@ -362,15 +579,12 @@ class Player {
       this.velocity.x = this.velocity.y = 0
   }
 
-  dash(dir) {
-    // if(dir == 'left') {
-    //   // add a substantial momentary boost towards the ship's left
-    // }
-    // if(dir == 'right') {
-      // add a substantial momentary boost towards the ship's right
+  dash() {
       if(this.dashTimer) return;
       if(dodgeDir) return;
       var rad;
+      this.velocity.x /= this.agility
+      this.velocity.y /= this.agility
       if(this.rotation >= 0 && this.rotation < 90) {
         rad = (90 - this.rotation) * (pi/180);
         this.velocity.x += Math.abs(Math.cos(rad) * this.maxVel*5 )
@@ -393,8 +607,10 @@ class Player {
         this.velocity.x += -Math.abs(Math.cos(rad) * this.maxVel*5 )
         this.velocity.y += -Math.abs(Math.sin(rad) * this.maxVel*5 )
       }
+      this.velocity.x += this.agility
+      this.velocity.y += this.agility
     // }
-    this.dashTimer = 45
+    this.dashTimer = this.dashTimerMax //issue terrible naming
   }
   dashRecharge() {
     if(this.dashTimer >= 1) {
@@ -414,11 +630,16 @@ class Player {
 }
 
 class Ghost {
-  constructor(x,y,rotation) {
+  constructor(x,y,rotation,parentSprite) {
     this.x = x
     this.y = y
     this.rotation = rotation
     this.alpha = ghostOpacity
+    this.sprite = parentSprite
+    this.spriteDim = {
+      x: 128,
+      y: 128,
+    }
   }
   draw() {
     ctx.save()
@@ -426,7 +647,7 @@ class Ghost {
     ctx.rotate(this.rotation * pi / 180)
     if(player.invulnerable) ctx.filter = 'saturate(0)'
     ctx.globalAlpha = this.alpha;
-    ctx.drawImage(shipSprite, 0 - shipSize/2, 0 - shipSize/2, shipSize, shipSize)
+    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2, this.spriteDim.x, this.spriteDim.y)
 
     ctx.restore()
   }
@@ -441,9 +662,9 @@ class Projectile {
       this.radius = radius;
       this.color = color;
       this.velocity = velocity;
-      this.bounces = 3;
+      // this.bounces = 3; // so far remove the ricochet from all projectiles, it's stupid
       this.bounced = false;
-      this.power = 1.3
+      this.power = 0.30
       this.type = type;
       this.damage = 8
       this.damageFalloff = {
@@ -468,10 +689,10 @@ class Projectile {
       this.type = type;
       this.dead = false;
     }
-    if(type == 'cannonball') {
+    if(type == 'cannon') {
       this.x = x;
       this.y = y;
-      this.radius = radius * cannonballRadiusMult;
+      this.radius = radius * cannonRadiusMult;
       this.color = color;
       this.velocity = {
         x: velocity.x *0.7,
@@ -480,7 +701,7 @@ class Projectile {
       this.bounces = 0;
       this.bounced = false;
       this.life = 4;
-      this.power = 6
+      this.power = 12
       this.type = type;
       this.dead = false;
     }
@@ -498,6 +719,12 @@ class Projectile {
       this.power = 6
       this.type = type;
       this.dead = false;
+      this.sprite = new Image()
+      this.sprite.src = 'assets/missile.png'
+      this.spriteDim = {
+        x: 32,
+        y: 32
+      }
     }
     if(type == 'machine') {
       this.x = x;
@@ -510,20 +737,26 @@ class Projectile {
       };
       this.bounces = 0;
       this.bounced = false;
-      this.power = 1.3
+      this.power = 0.35
       this.damage = 7
       this.type = type;
       this.dead = false;
     }
   }
   draw() {
-    ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
-    ctx.fillStyle = this.color
-    ctx.fill();
-    ctx.closePath();
+    
+    // if(this.type == 'explosive') {
+    //   ctx.drawImage(this.sprite,this.x - this.spriteDim.x/2,this.y - this.spriteDim.y/2, this.spriteDim.x, this.spriteDim.y)
+    // } else {
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,this.radius,0,pi * 2, false)
+      ctx.fillStyle = this.color
+      ctx.fill();
+      ctx.closePath();      
+    // }
   }
   saveGhost() {
+    // if(this.type !== 'explosive')
     projectileGhosts.push(new ProjectileGhost(this.x,this.y,this.radius, this.color))
   }
   
@@ -551,7 +784,7 @@ class ProjectileGhost {
     this.y = y
     this.radius = radius
     this.color = color
-    this.alpha = 0.2
+    this.alpha = 0.4
     this.dead = false
   }
   draw() {
@@ -585,9 +818,9 @@ class EnemyShip {
       x: 1,
       y: 1,
     }
-    this.velAbsorb = 0
+    this.velAbsorb = 0.1
 
-    this.armor = 5
+    this.armor = 10
     this.invulnerable = false;
     this.destroy = false
     this.dead = false
@@ -649,7 +882,7 @@ class EnemyShip {
     
     var dist = Math.hypot(player.x - this.x, player.y - this.y) 
 
-    if(dist < player.spriteDim.x + this.spriteDim.x ) {
+    if(dist < player.dimX + this.spriteDim.x ) {
       this.velocity.x *= 0.9
       this.velocity.y *= 0.9
     }
@@ -988,6 +1221,7 @@ class Debris {
 
 class Asteroid {
   constructor(x,y,rotation,velocity,type) {
+    this.id = Math.round(Math.random()*100000000000) //minorissue this has a very low chance to break, so it's probably okay
     this.x = x
     this.y = y
     this.rotation = rotation
@@ -1000,7 +1234,11 @@ class Asteroid {
       y: 128
     }
     this.weight = 200
-    this.velAbsorb = 0.5
+    this.velAbsorb = 0.15
+    this.canCollide = true;
+    this.stuck = false;
+    this.stuckTimer = 3
+    this.stuckInside = null; // after it hits an asteroid it has the id of the previous asteroid written here, it is deleted after it is unstuck
   }
   draw() {
     ctx.save()
@@ -1008,6 +1246,15 @@ class Asteroid {
     ctx.rotate(this.rotation * pi/180)
     ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
     ctx.restore()
+    if(debug) {
+      ctx.save() //debug code
+      ctx.translate(this.x,this.y)
+      ctx.font = '14px Arial'
+      ctx.fillStyle = 'white'
+      ctx.fillText(`${this.id}`, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2);
+      ctx.restore()
+    }
+    
   }
   update() {
     this.draw()
@@ -1050,7 +1297,7 @@ class DeadShipDialog {
       this.trigger.style.left = (Math.round(this.x) - this.source.radius/2) + 'px'
       this.trigger.style.top = (Math.round(this.y) - this.source.radius/2) + 'px'
     }
-    if(Math.hypot(player.x - this.x, player.y - this.y) < player.spriteDim.x + this.source.spriteDim.x) {
+    if(Math.hypot(player.x - this.x, player.y - this.y) < player.dimX*1.5) {
       this.trigger.style.pointerEvents = 'all'
       this.indicator.style.borderColor = 'white'
     } else {
@@ -1146,6 +1393,8 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   roomIndex = 0
   generateSector()
   arrowContainer.classList.remove('hidden')
+  healthbar.innerHTML = ''
+  healthSegments = []
   dodgeDir = null;
   waveActive = true;
   waveNumber = 1;
@@ -1153,21 +1402,21 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   // regular amounts
   ammoRegular = 30
   ammoShrapnel = 3
-  ammoCannonball = 2
+  ammoCannon = 2
   ammoExplosive = 0
   ammoMachine = 0
   // playtesting amounts
   ammoRegular = 100
   ammoShrapnel = 100
-  ammoCannonball = 100
+  ammoCannon = 100
   ammoExplosive = 100
   ammoMachine = 100
 
-  ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
-  player.x = centerX
-  player.y = centerY
-  player.armor = 8
-  player.velocity.x = player.velocity.y = 0
+  ammoTotal = ammoRegular + ammoShrapnel + ammoCannon + ammoExplosive + ammoMachine
+
+  //issue there needs to be a definitive way of storing the chosen ship
+  // player = new Ship(centerX, centerY, 20,0,ships.wasp) 
+  toggleShipSelection()
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, canvas.width, canvas.height, 'black');
 
@@ -1182,60 +1431,29 @@ function init() { //this is a hard reset, this resets (almost) everything to the
 
 
   cancelAnimationFrame(drawId)
-  draw()
-  
-
-  // spawnEnemyShip()
-
+  clearRoom()
   updateScoreVisual()
   updateAmmoVisual()
+  generateArmorVisual()
   updateHealthBar()
-  clearRoom()
+
+  draw()
 }
 
-let centerX = canvas.width/2
-let centerY = canvas.height/2
-let mouseX
-let mouseY
+// let player = new Ship(centerX, centerY, 20,0,ships.wasp) // this is bad, really terrible
 
-let dodgeDistance = 300
-let maxDodge = 550
-let minDodge = 200
-let cursorRadius = 10
-let playerMoved = false
-let dodgeSpeed = 0.05
-let dodgeSpeedMod = dodgeDistance; // interesting idea
-let dodgeResizing = false
+function generateArmorVisual() {
+  console.log('Player armor before generating the visual: ' + player.armor)
+  for (let i = 0; i < player.armor; i++) {
+    var s = document.createElement('div')
+    s.classList.add('armor-segment')
+    healthSegments.push(s)
+    healthbar.append(s)
+  }
+}
 
-let baseHealth = 500;
-let baseRadius = 80;
-
-let projectiles = []
-let projectileGhosts = []
-let enemies = []
-let enemyProjectiles = []
-let particles = []
-let explosions = []
-let enemyships = []
-let asteroids = []
-let debriss = []
-const projRadius = 5
-const projectileSpeed = 9
-let shrapnelRadiusMult = 1.5
-let cannonballRadiusMult = 4
-let explosiveRadiusMult = 2.5
-let enemyRadius = 40
-let enemySpeed = 1
-let particleRadius = 3
-let particleVariance = 3
-let particleSpeed = 4
-let friction = 0.999
-let machineFireRate = 12
-let explosionColor = 'orange'
-let explosionRadius = 220
-
-const player = new Player(centerX, centerY, 20,0, 'white', {x: dodgeDistance, y: dodgeDistance})
 let mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHealth)
+
 
 
 canvas.addEventListener('mousemove', function(e) {
@@ -1349,10 +1567,10 @@ function processWheelEvents(e) {
 }
 function resizeDodge(e) {
   var resize = e.deltaY / 3
-  if(dodgeDistance <= maxDodge && dodgeDistance >= minDodge) {
+  if(dodgeDistance <= player.maxDodge && dodgeDistance >= minDodge) {
     dodgeDistance -= resize;
-    if(dodgeDistance >= maxDodge) {
-      dodgeDistance = maxDodge
+    if(dodgeDistance >= player.maxDodge) {
+      dodgeDistance = player.maxDodge
     } else if(dodgeDistance <= minDodge) {
       dodgeDistance = minDodge
     }
@@ -1414,8 +1632,8 @@ function fire(e) {
     ammoShrapnel--
     spawnProjectile(e)
   }
-  if(currentAmmoType == 'cannonball' && ammoCannonball > 0) {
-    ammoCannonball--
+  if(currentAmmoType == 'cannon' && ammoCannon > 0) {
+    ammoCannon--
     spawnProjectile(e)
   }
   if(currentAmmoType == 'explosive' && ammoExplosive > 0) {
@@ -1443,15 +1661,11 @@ function spawnProjectile(e) {
 }
 
 function drawBackground() {
-  ctx.save()
-  ctx.beginPath();
-  // ctx.filter = 'blur(2px)'
-  ctx.rect(0,0,canvas.width,canvas.height)
-  ctx.fillStyle = 'hsla(0,0%,2%,1)'
-  ctx.fill()
-  ctx.closePath();
-  // ctx.drawImage(canvas,0,0,cw,ch)
-  ctx.restore()
+  ctxBg.beginPath()
+  ctxBg.rect(0,0,canvas.width,canvas.height)
+  ctxBg.fillStyle = 'hsl(0,0%,2%)'
+  ctxBg.fill()
+  ctxBg.closePath()
 }
 
 function drawCursor() {
@@ -1464,13 +1678,16 @@ function drawCursor() {
 
 // main draw function
 function draw() {
-  ctx.save()
-  drawBackground();
+
+  drawBackground(); //issue doesn't actually need to be drawn more than once at this point, but this isnt causing major performance drops anyways
+  ctx.clearRect(0,0,cw,ch)
+
   projectiles.forEach((projectile, indexProj)=> {
     
 
     // ricochet projectile off walls if bounces > 0
     // for left and right wall
+
     if(
       (projectile.x > (canvas.width - projRadius) || projectile.x < (0 + projRadius)) &&
       projectile.bounces > 0
@@ -1479,7 +1696,7 @@ function draw() {
       projectile.bounced = true
       projectile.bounces -= 1
       projectile.velocity.x *= -1
-      setTimeout(()=>{projectile.bounced = false},50)
+      setTimeout(()=>{projectile.bounced = false},25)
     }
 
     // top and bottom wall
@@ -1490,7 +1707,7 @@ function draw() {
       projectile.bounced = true
       projectile.bounces -= 1
       projectile.velocity.y *= -1
-      setTimeout(()=>{projectile.bounced = false},50)
+      setTimeout(()=>{projectile.bounced = false},25)
     }
 
     // destroy projectile if it went off the canvas
@@ -1668,8 +1885,8 @@ function draw() {
   //       }
   //     }
       
-  //     // spawn particles for cannonball
-  //     if (projectile.type == 'cannonball') {
+  //     // spawn particles for cannon
+  //     if (projectile.type == 'cannon') {
   //       for (let i = 0; i < enemy.radius/8; i++) {
   //         particles.push(new Particle(
   //           (projectile.x + (Math.random()*20 - 10)), 
@@ -1732,8 +1949,8 @@ function draw() {
   //       updateScore('shrink-enemy')
   //     } 
 
-  //     // hit by cannonball
-  //     if (projectile.type == 'cannonball') {
+  //     // hit by cannon
+  //     if (projectile.type == 'cannon') {
   //       gsap.to(enemy, {radius: 1, duration: 0.3})
   //       projectile.life--
   //       projectile.velocity.x *= 1 - (enemy.radius/200 + 0.05)
@@ -1872,15 +2089,6 @@ function draw() {
     }
   })
 
-  //spawning mechanic
-  if(enemies.length >= 12) {
-    reachedEnemyCap = true;
-  } else if(enemies.length <= 2) {
-    reachedEnemyCap = false;
-
-  }
-
-
   //explosions mechanic
   explosions.forEach((explosion, explIndex)=>{
     explosion.update()
@@ -1892,7 +2100,7 @@ function draw() {
 
     let playerDistance = Math.hypot(explosion.x - (player.x - player.radius),explosion.y - (player.y - player.radius))
     if(playerDistance <= explosion.radius) {
-      endGame()
+      player.damage()
     }
     enemies.forEach((enemy,enemyIndex) => {
 
@@ -1936,11 +2144,93 @@ function draw() {
         asteroids.splice(astIndex,1)
       },0)
     }
+
+    // check for collision with other asteroids
+    asteroids.forEach((ast,astInd)=> {  // this collision detection is x^2 performance-wise, where x = number of asteroids
+      if(ast.id == asteroid.id) return
+
+      let distance = Math.hypot(ast.x - asteroid.x,ast.y - asteroid.y) 
+
+      // if(distance > ast.spriteDim.x/3 + asteroid.spriteDim.x/3 + 10) {
+      //   ast.canCollide = true
+      //   asteroid.canCollide = true
+      // }
+      // if(ast.canCollide == false && asteroid.canCollide == false) return
+      
+
+
+      if(distance < ast.spriteDim.x/3 + asteroid.spriteDim.x/3) { // if collision successful
+
+        if(ast.stuckTimer > 0) {
+          ast.stuckTimer--
+        } else {
+          ast.stuck = true
+        }
+        if(asteroid.stuckTimer > 0) {
+          asteroid.stuckTimer--
+        } else {
+          asteroid.stuck = true
+        }
+
+        ast.stuckInside = asteroid.id
+        asteroid.stuckInside = ast.id
+
+        var velTotal = {
+          x: (ast.velocity.x + asteroid.velocity.x),
+          y: (ast.velocity.y + asteroid.velocity.y),
+        }
+
+        if(ast.stuck + asteroid.stuck < 1) {
+          // console.log(ast.stuck + asteroid.stuck)
+          // console.log("Stuck timer: " + ast.stuckTimer + ' ' + asteroid.stuckTimer)
+          velTotal.x -= (ast.velocity.x + asteroid.velocity.x)*asteroid.velAbsorb
+          velTotal.y -= (ast.velocity.y + asteroid.velocity.y)*asteroid.velAbsorb
+          // console.log('reducing velocity')
+        }
+        
+
+        ast.velocity.x = velTotal.x/2
+        ast.velocity.y = velTotal.y/2
+        asteroid.velocity.x = velTotal.x/2
+        asteroid.velocity.y = velTotal.y/2
+
+        // ast.canCollide = false
+        // asteroid.canCollide = false
+
+        
+      }
+      else // if the same collision isn't true anymore for 3 whole frames
+      if(
+        distance > ast.spriteDim.x/3 + asteroid.spriteDim.x/3 &&
+        ast.stuck && 
+        asteroid.stuck &&
+        ast.stuckInside == asteroid.id &&
+        asteroid.stuckInside == ast.id
+      ) { 
+        
+        if(ast.stuckTimer < 3) {
+          ast.stuckTimer++
+        } else {
+          ast.stuck = false
+          ast.stuckInside = null
+        }
+        if(asteroid.stuckTimer < 3) {
+          asteroid.stuckTimer++
+        } else {
+          asteroid.stuck = false
+          asteroid.stuckInside = null
+
+        }
+      }
+
+      
+    })
+
     // check if player touching asteroid
     let distance = Math.hypot(player.x - asteroid.x,player.y - asteroid.y)
     
     // when player touches asteroid
-    if(distance - player.radius - asteroid.spriteDim.x/2 < 0) { //issue player radius is still being used to detect collision
+    if(distance < player.radius + asteroid.spriteDim.x/2) { //issue player radius is still being used to detect collision
 
       
 
@@ -1948,13 +2238,14 @@ function draw() {
       if(!dodgeDir) {
         
         var velTotal = {
-          x: (player.velocity.x + asteroid.velocity.x) - (player.velocity.x + asteroid.velocity.x)*asteroid.velAbsorb, 
-          y: (player.velocity.y + asteroid.velocity.y) - (player.velocity.y + asteroid.velocity.y)*asteroid.velAbsorb,
+          x: (player.velocity.x + asteroid.velocity.x),
+          y: (player.velocity.y + asteroid.velocity.y),
         }
-
-        if(player.invulnerable == false && (velTotal.x * velTotal.y) < player.impactResistance) player.damage()
-
-        // calculate the balance which will determine how much
+        if(player.invulnerable == false && (Math.abs(velTotal.x) + Math.abs(velTotal.y)) > player.impactResist) player.damage()
+        velTotal.x -= (player.velocity.x + asteroid.velocity.x)* asteroid.velAbsorb // only apply velAbsorb AFTER the player might have taken damage
+        velTotal.y -= (player.velocity.y + asteroid.velocity.y)* asteroid.velAbsorb
+        
+        // calculate the balance which will determine how much of the velTotal will each receive based on weight of the two colliding entities
         var playerBalance = asteroid.weight / player.weight //issue ,this is a super janky way to write this, it could be just a few lines
         var asteroidBalance =  player.weight / asteroid.weight 
         
@@ -1962,7 +2253,7 @@ function draw() {
         
         playerBalance = 1 - min
         asteroidBalance = min
-        console.log(playerBalance + ' ' + asteroidBalance)
+        // console.log(playerBalance + ' ' + asteroidBalance)
         player.velocity.x = -velTotal.x * playerBalance
         // - velTotal.x/balance
         player.velocity.y = -velTotal.y * playerBalance
@@ -2035,13 +2326,13 @@ function draw() {
         }
         if(
           player.invulnerable == false && 
-          (Math.abs(velTotal.x) + Math.abs(velTotal.y)) > player.impactResistance) 
+          (Math.abs(velTotal.x) + Math.abs(velTotal.y)) > player.impactResist) 
         { 
           player.damage()
         }
-        console.log(Math.abs(velTotal.x) + Math.abs(velTotal.y))
+        // console.log(Math.abs(velTotal.x) + Math.abs(velTotal.y))
         
-        console.log('Velocity total - x: '+ velTotal.x + ' ' + 'y: '+ velTotal.y)
+        // console.log('Velocity total - x: '+ velTotal.x + ' ' + 'y: '+ velTotal.y)
 
         player.velocity.x = velTotal.x/2 - velTotal.x/25 
         player.velocity.y = velTotal.y/2 - velTotal.y/25
@@ -2144,7 +2435,6 @@ function draw() {
 function drawFireAnim() {
   ctx.beginPath()
   ctx.arc(player.x,player.y,10,0, pi*2, false)
-  // ctx.strokeStyle = `hsla(35,100%,60%,${0 + 0.1 * firedFadeout})`
   ctx.strokeStyle = `hsla(221,100%,80%,${0 + 0.1 * firedFadeout})`
   ctx.lineWidth = 5
   ctx.stroke()
@@ -2158,8 +2448,8 @@ function initBackground() {
   ctx.fill()
   ctx.closePath();
 }
+// player.draw();
 initBackground()
-player.draw();
 
 // utility functions 
 
@@ -2183,8 +2473,8 @@ function getColor(arg) {
 function getProjectileColor() {
   if (currentAmmoType == 'regular') return 'hsl(221, 100%, 80%)'
   if (currentAmmoType == 'shrapnel') return 'hsl(221, 100%, 80%)'
-  if (currentAmmoType == 'cannonball') return 'hsl(221, 100%, 80%)'
-  if (currentAmmoType == 'explosive') return 'orange'
+  if (currentAmmoType == 'cannon') return 'hsl(221, 100%, 80%)'
+  if (currentAmmoType == 'explosive') return 'hsl(4,89%,45%)'
   if (currentAmmoType == 'machine') return 'hsl(221, 100%, 80%)'
 }
 
@@ -2196,11 +2486,19 @@ function start() {
   drawBackground()
   closeModal();
   dialogContainer.style.display = ''
+  // dialogs.push(new Dialog(`
+  // You have found yourself floating in an empty part of cosmos. 
+
+  // Your reactor is running low on uranium and your food rations have drastically diminished since you last docked at a refueling station.
+
+  // `))
   dialogs.push(new Dialog(`
-  You have found yourself floating in an empty part of cosmos. 
+  The princess of the ruling council of Draco II had gone missing. 
 
-  Your reactor is running low on uranium and your food rations have drastically diminished since you last docked at a refueling station.
+  Your mission is to locate her and transport her safely back to the council.
 
+  She could be anywhere in the near galactic cluster...
+  
   `))
   
 }
@@ -2219,6 +2517,9 @@ function freeze() {
 document.addEventListener('keydown', processKeydown, false)
 
 function processKeydown(e) {
+  if(e.code == 'Digit1') {
+    debug = !debug
+  }
   if(e.code == 'KeyR' ) {
     start();
   }
@@ -2233,6 +2534,15 @@ function processKeydown(e) {
   if(e.code == 'KeyM' ) {
     toggleMap()
   }
+  if(e.code == 'KeyI' ) {
+    toggleInventory()
+  }
+  if(inventoryOpen) return; //important, this might cause me a headache if i forget that it's here
+
+  if(e.code == 'KeyT' ) {
+    player.toggleShields()
+  }
+
   if(e.code == 'ShiftLeft') {
     pressedShift = true
     // console.log('[Shift] down')
@@ -2329,7 +2639,7 @@ function displayDodgePositions() {
   ctx.save()
   ctx.globalAlpha = windup / 100
   if(dodgeDir) ctx.globalAlpha *= 0.7
-  ctx.strokeStyle = player.color
+  ctx.strokeStyle = 'white'
   ctx.lineWidth = 2.5
   ctx.fillStyle = 'white';
   //left
@@ -2468,10 +2778,22 @@ function gainAmmo(type) {
   updateAmmoVisual();
 }
 function calcAmmoTotal() {
-  ammoTotal = ammoRegular + ammoShrapnel + ammoCannonball + ammoExplosive + ammoMachine
+  ammoTotal = ammoRegular + ammoShrapnel + ammoCannon + ammoExplosive + ammoMachine
 }
 
 //UI functionality
+
+function toggleShipSelection() {
+  shipSelectCont.classList.toggle('hidden')
+}
+
+function chooseShip(key) {
+  if(key in ships) {
+    player = new Ship(centerX, centerY, 20,0,ships[key]) 
+    toggleShipSelection()
+  }
+  else console.log('Invalid ship key entered.')
+}
 
 function updateHealthBar() {
 
@@ -2509,6 +2831,23 @@ function updateArrows() {
 }
 function toggleMap() {
   mapContainer.classList.toggle('hidden')
+  mapIcon.classList.toggle('selected')
+  
+  inventoryContainer.classList.add('hidden')
+  invIcon.classList.remove('selected')
+
+  inventoryOpen = false
+  mapOpen = !mapOpen
+}
+function toggleInventory() {
+  inventoryContainer.classList.toggle('hidden')
+  invIcon.classList.toggle('selected')
+  
+  mapContainer.classList.add('hidden')
+  mapIcon.classList.remove('selected')
+
+  inventoryOpen = !inventoryOpen
+  mapOpen = false
 }
 function updateScoreVisual() {
   scoreTop.innerHTML = score;
@@ -2516,7 +2855,7 @@ function updateScoreVisual() {
 function updateAmmoVisual() {
   ammoSpriteRegular.classList.remove('selected')
   ammoSpriteShrapnel.classList.remove('selected')
-  ammoSpriteCannonball.classList.remove('selected')
+  ammoSpriteCannon.classList.remove('selected')
   ammoSpriteExplosive.classList.remove('selected')
   ammoSpriteMachine.classList.remove('selected')
 
@@ -2526,8 +2865,8 @@ function updateAmmoVisual() {
   if(currentAmmoType == 'shrapnel') {
     ammoSpriteShrapnel.classList.add('selected')
   }
-  if(currentAmmoType == 'cannonball') {
-    ammoSpriteCannonball.classList.add('selected')
+  if(currentAmmoType == 'cannon') {
+    ammoSpriteCannon.classList.add('selected')
   }
   if(currentAmmoType == 'explosive') {
     ammoSpriteExplosive.classList.add('selected')
@@ -2537,7 +2876,7 @@ function updateAmmoVisual() {
   }
   dispAmmoRegular.innerHTML = ammoRegular;
   dispAmmoShrapnel.innerHTML = ammoShrapnel;
-  dispAmmoCannonball.innerHTML = ammoCannonball;
+  dispAmmoCannon.innerHTML = ammoCannon;
   dispAmmoExplosive.innerHTML = ammoExplosive;
   dispAmmoMachine.innerHTML = ammoMachine;
 }
@@ -2552,10 +2891,10 @@ function cycleAmmo(arg) { // ima do some bad coding here
     updateAmmoVisual();
   }
   else if(currentAmmoType == 'shrapnel') {
-    currentAmmoType = 'cannonball';
+    currentAmmoType = 'cannon';
     updateAmmoVisual();
   }
-  else if(currentAmmoType == 'cannonball') {
+  else if(currentAmmoType == 'cannon') {
     currentAmmoType = 'explosive';
     updateAmmoVisual();
   }
@@ -2574,10 +2913,10 @@ function cycleAmmo(arg) { // ima do some bad coding here
       updateAmmoVisual();
     }
     else if(currentAmmoType == 'explosive') {
-      currentAmmoType = 'cannonball';
+      currentAmmoType = 'cannon';
       updateAmmoVisual();
     }
-    else if(currentAmmoType == 'cannonball') {
+    else if(currentAmmoType == 'cannon') {
       currentAmmoType = 'shrapnel';
       updateAmmoVisual();
     }
@@ -2654,7 +2993,7 @@ function detonate() {
       
       //  setTimeout(()=> { //issue // the timeout is kinda janking things up, it doesn't remove everything but pushes 1 explosion per projectile anyways
       explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
-      projectiles.splice(index, 1);
+      projectile.dead = true
       // },0)
     }
   })
@@ -2676,7 +3015,7 @@ class Room {
     this.cleared = false;
     // essentially if a side == portal, you can travel that direction, direction determines the x and y of the next room, left means x = x -1, y = y etc....
 
-    // this.visual = document.createElement
+    
     this.contents = []
     
   }
@@ -2818,7 +3157,15 @@ function generateMap() {
 let roomCont = [
   {
     key: 'asteroids',
-    count: 3,
+    count: 15, //temp
+  },
+  {
+    key: 'asteroids',
+    count: 15, //temp
+  },
+  {
+    key: 'asteroids',
+    count: 15, //temp
   },
   {
     key: 'enemy-ship',
@@ -2833,9 +3180,12 @@ let roomCont = [
     count: 3,
   },
   {
+    key: 'debris-field',
+    count: 15,
+  },
+  {
     key: 'empty',
   },
-
 
 ]
 
@@ -2914,13 +3264,6 @@ function teleport() { //debug // this is msotly a debug feature, it probably won
   loadRoom(currRoom)
 }
 
-// let roomtypes = [
-//   'asteroid',
-//   'debris',
-//   'enemy-ship',
-//   'shipwreck',
-//   'empty',
-// ]
 
 function loadRoom(room) {
   // this function loads all content that should be inside a room when you travel there
@@ -2948,6 +3291,9 @@ function loadRoom(room) {
     if(object.key == 'debris') {
       distributeDebris(object.count)
     }
+    if(object.key == 'debris-field') {
+      distributeDebris(object.count)
+    }
     if(object.key == 'enemy-ship') {
       spawnEnemyShip(object.count)
     }
@@ -2967,6 +3313,7 @@ function clearRoom() {
   asteroids = []
   debriss = []
   deadShipDialogs = []
+  dialogOverlay.innerHTML = ''
 }
 function updateMapVisual(currRoom) {
   var index = (currRoom.x + 0) + (currRoom.y + 0) *8

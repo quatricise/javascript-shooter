@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shooter Game</title>
+  <title>The Lost Princess</title>
   <link rel="stylesheet" href="node_modules/normalize.css/normalize.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -35,14 +35,6 @@
     </div>
     <div class="healthbar-container">
       <div class="healthbar">
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
-        <div class="armor-segment"></div>
 
       </div>
     </div>
@@ -52,15 +44,23 @@
       </div>
     </div>
   </div>
-  <div class="ammobox">
+  <div class="ui top-right">
+
+    <div class="map-icon" onclick="toggleMap()"></div>
+    <div style="width:15px"></div>
+
+    <div class="inv-container">
+      <div class="inv-icon" onclick="toggleInventory()"></div>
+    </div>
+    <div style="width:15px"></div>
     <div class="ammo regular" onclick="switchAmmo('regular')">
       <span class="ammo-count regular" id="ammo-regular">0</span>
     </div>
     <div class="ammo shrapnel" onclick="switchAmmo('shrapnel')">
       <span class="ammo-count shrapnel" id="ammo-shrapnel">0</span>
     </div>
-    <div class="ammo cannonball" onclick="switchAmmo('cannonball')">
-      <span class="ammo-count cannonball" id="ammo-cannonball">0</span>
+    <div class="ammo cannon" onclick="switchAmmo('cannon')">
+      <span class="ammo-count cannon" id="ammo-cannon">0</span>
     </div>
     <div class="ammo explosive" onclick="switchAmmo('explosive')">
       <span class="ammo-count explosive" id="ammo-explosive">0</span>
@@ -77,14 +77,43 @@
   </div>
   <div class="overlay-main"></div>
   <div class="fullscreen-container" id="dialog-container"></div>
-  <div class="fullscreen-container hidden" id="map-container" >
-    <div class="sector-map" id="sector-map"></div>
-  </div>
-  <div class="overlay-dialog">
 
+  <!-- map -->
+  <div class="fullscreen-container hidden" id="map-container" >
+    <div class="sector-map gui-large" id="sector-map"></div>
   </div>
-  <canvas id="canvas">
-  </canvas>
+
+  <!-- inventory -->
+  <div class="inv-cont hidden" id="inventory-container">
+    <div class="inventory gui-large">
+      <h2 class="heading">INVENTORY</h2>
+    </div>
+  </div>
+
+  <!-- ship select -->
+  <div class="ship-select-cont hidden" id="ship-select-container">
+    <div class="ship-select gui-large">
+      <h2 class="heading">SHIP SELECT</h2>
+      <div class="ships-slider">
+        <div class="ship-item">
+          <img src="assets/moth_default_w1920.png" alt="" data-name='moth' onclick="chooseShip(this.dataset.name)">
+        </div>
+        <div class="ship-item">
+          <img src="assets/wasp_default_w1920.png" alt=""  data-name='wasp' onclick="chooseShip(this.dataset.name)">
+        </div>
+        <div class="ship-item">
+          <img src="assets/cargo_ship_small_w1920.png" alt=""  data-name='cargo' onclick="chooseShip(this.dataset.name)">
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- this is for various in-game dialog optious -->
+  <div class="overlay-dialog"></div>
+
+  <canvas id="canvas-bg" class="canvas"></canvas>
+  <canvas id="canvas" class="canvas"></canvas>
+  <canvas id="canvas-fx" class="canvas"></canvas>
   <!-- <script type="module">
     import gsap from "/node_modules/gsap/all.js";
   </script> -->
