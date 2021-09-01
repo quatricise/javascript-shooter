@@ -69,7 +69,7 @@ body {
   z-index: 10;
 }
 
-.ammo, .inv-icon, .map-icon {
+.ammo, .inv-icon, .map-icon, .ship-icon {
   display: flex;
   justify-content: center;
   justify-items: center;
@@ -79,7 +79,9 @@ body {
   background-size: contain;
   cursor: pointer;
 }
-
+#map-container {
+  z-index: 5;
+}
 .map-icon {
   background-image: url(assets/map.png);
 }
@@ -91,6 +93,12 @@ body {
 }
 .inv-icon.selected {
   background-image: url(assets/inventory_open.png);
+}
+.ship-icon.moth {
+  background-image: url(assets/moth_icon.png);
+}
+.inv-icon.moth.selected {
+  background-image: url(assets/moth_icon_open.png);
 }
 
 .ammo.regular {
@@ -236,6 +244,7 @@ body {
   border-color: rgba(255, 255, 255, 0.308);
   box-shadow: 0px 0px 100px 20px rgba(118, 123, 255, 0.158);
   cursor: default;
+  user-select: none;
 }
 
 .gui-large {
@@ -283,7 +292,7 @@ body {
   width: 100%;
   text-align: center;
   color: white;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.13em;
   font-family: 'action';
   user-select: none;
 }
@@ -307,7 +316,7 @@ body {
   /* width: 100%; */
   text-align: center;
   color: white;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.13em;
   font-family: 'action';
   user-select: none;
 }
@@ -347,7 +356,7 @@ body {
   width: 90%;
 }
 .room {
-  background-color: rgb(36, 36, 36);
+  background-color: rgb(29, 29, 29);
   cursor: pointer;
 }
 .room:hover {
@@ -368,14 +377,19 @@ body {
   height: 50px;
   font-size: 24px;
   user-select: none;
-  color: white;
-  pointer-events: initial;
+  color: rgba(255, 255, 255, 0.4);
+  /* debug ↓↓ */
+  pointer-events: initial; 
   cursor: pointer;
   margin: 10px;
   border-radius: 2px;
 }
 .arrow:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.arrow.close {
+  color: rgb(255, 255, 255);
 }
 .arrow.left {
   left: 0;

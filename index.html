@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The Lost Princess</title>
+  <title>Space game</title>
   <link rel="stylesheet" href="node_modules/normalize.css/normalize.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -49,6 +49,9 @@
     <div class="map-icon" onclick="toggleMap()"></div>
     <div style="width:15px"></div>
 
+    <div class="ship-icon moth" onclick="toggleInventory()"></div>
+    <div style="width:15px"></div>
+
     <div class="inv-container">
       <div class="inv-icon" onclick="toggleInventory()"></div>
     </div>
@@ -70,10 +73,10 @@
     </div>
   </div>
   <div class="fullscreen-container hidden" id="arrow-container" >
-    <div class="arrow left" onclick="travel(-1,0)">⮜</div>
-    <div class="arrow right" onclick="travel(1,0)">⮞</div>
-    <div class="arrow top" onclick="travel(0,-1)">⮝</div>
-    <div class="arrow bottom" onclick="travel(0,1)">⮟</div>
+    <div class="arrow left" onclick="travel(-1,0,'left')">⮜</div>
+    <div class="arrow right" onclick="travel(1,0,'right')">⮞</div>
+    <div class="arrow top" onclick="travel(0,-1,'up')">⮝</div>
+    <div class="arrow bottom" onclick="travel(0,1,'down')">⮟</div>
   </div>
   <div class="overlay-main"></div>
   <div class="fullscreen-container" id="dialog-container"></div>
