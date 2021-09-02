@@ -169,6 +169,8 @@ let enemyships = []
 let asteroids = []
 let debriss = []
 
+let dockingStations = []
+
 const projRadius = 5
 const projectileSpeed = 9
 let shrapnelRadiusMult = 1.5
@@ -183,6 +185,13 @@ let friction = 0.999 // global friction variable, only used for particles, which
 let machineFireRate = 12
 let explosionColor = 'orange'
 let explosionRadius = 220
+
+let items = {
+  laser_mount: {
+    description: 'Cheap laser mount.'
+  },
+  
+}
 
 let weapons = {
   debug: { //probably just a debug gun
@@ -200,8 +209,20 @@ let weapons = {
   front_laser_double: {
     type: 'energy|hitscan',
     damage: 1,
+    firerate: 200, //in ms
+    //in ms  -- this is the window for clicks to prepareFire() for the weapon, if you click 100ms or less in advance, it still fires 
+    //idea could be a global var ↓
+    fireWindow: 100, 
     energyCost: 2,
     lasers: 2,
+    rechargeTimeInit: 30,
+    rechargeTime: 30,
+    chargesMax: 3,
+    charges: 1,
+    rechargeInit() {
+      this.rechargeTime = this.rechargeTimeInit
+      if(debug) console.log('Laser recharging initiated...')
+    }
   },
   side_auto_gat_m1: {
     type: 'ammo|projectile',
@@ -218,6 +239,7 @@ let ships = {
       base: 'assets/moth_default.png',
       turret: 'assets/moth_default_turret.png',
       dashInd: 'assets/moth_default_dash_indicator.png',
+      laserInd: null,
       dimX: 128,
       dimY: 128,
     },
@@ -237,6 +259,7 @@ let ships = {
     weapons: {
       
     },
+    mounts: 2,
     weight: 25,
     impactResist: 4,
     shields: {
@@ -260,6 +283,12 @@ let ships = {
       base: 'assets/wasp_default.png',
       turret: null,
       dashInd: 'assets/wasp_default_dash_indicator.png',
+      laserInd: {
+        c0: 'assets/wasp_default_laser_ind_0.png',
+        c1: 'assets/wasp_default_laser_ind_1.png',
+        c2: 'assets/wasp_default_laser_ind_2.png',
+        c3: 'assets/wasp_default_laser_ind_3.png',
+      },
       dimX: 128,
       dimY: 128,
     },
@@ -277,8 +306,9 @@ let ships = {
     reactorPower: 2,
     energyMax: 10,
     weapons: {
-      front_laser_double: weapons['front_laser_double']
+      front_laser_double: weapons['front_laser_double'] //default starting weapon of WASP-110
     },
+    mounts: 2,
     weight: 35,
     impactResist: 6,
     shields: {
@@ -303,6 +333,7 @@ let ships = {
       base: 'assets/cargo_ship_small.png',
       turret: null,
       dashInd: null,
+      laserInd: null,
       dimX: 128,
       dimY: 128,
     },
@@ -320,6 +351,7 @@ let ships = {
     reactorPower: 4,
     energyMax: 30,
     weapons: {},
+    mounts: 2,
     weight: 70,
     impactResist: 4,
     shields: {
@@ -330,7 +362,7 @@ let ships = {
     },
     dashTimerMax: 50,
     invSlots: 30,
-    autoBreakPower: 0.008,
+    autoBreakPower: 0.012,
     hitbox: {
       type: 'radius',
       radius: 50,
@@ -343,6 +375,7 @@ let ships = {
       base: 'assets/dynamo_cruiser_class_II.png',
       turret: null,
       dashInd: null,
+      laserInd: null,
       dimX: 256,
       dimY: 256,
     },
@@ -356,12 +389,13 @@ let ships = {
     maxVel: 10,
     acceleration: 2,
     backAccel: 1,
-    steerSpeed: 1.9,
+    steerSpeed: 1.75,
     reactorPower: 4,
     energyMax: 30,
     weapons: {
       debug: weapons['debug']
     },
+    mounts: 4,
     weight: 120,
     impactResist: 6,
     shields: {
@@ -381,6 +415,15 @@ let ships = {
     radius: 50, // unimportant, will be swapped for hitboxes later on
   },
 }
+let stations = {
+  docking_station : {
+    visual: {
+      base: 'assets/docking_station.png',
+      dimX: 512,
+      dimY: 512,
+    }
+  }
+}
 //classes
 class Ship {
   constructor (x,y,rotation,shipData) {
@@ -397,6 +440,7 @@ class Ship {
     this.reactorPower = shipData.reactorPower
     this.energyMax = shipData.energyMax
     this.weapons = shipData.weapons
+    this.mounts = shipData.mounts
     this.agility = shipData.agility //idea ,this influences the change in velocity when dashing
     this.shields = shipData.shields
     this.impactResist = shipData.impactResist
@@ -421,6 +465,19 @@ class Ship {
       this.turretDimX = this.dimX
       this.turretDimY = this.dimY
       this.turretRotation = 0
+    }
+    this.laserInd = null
+    if(this.visual.laserInd) {
+      this.laserInd = {};
+      this.laserInd.c0 = new Image()
+      this.laserInd.c0.src = this.visual.laserInd.c0
+      this.laserInd.c1 = new Image()
+      this.laserInd.c1.src = this.visual.laserInd.c1
+      this.laserInd.c2 = new Image()
+      this.laserInd.c2.src = this.visual.laserInd.c2
+      this.laserInd.c3 = new Image()
+      this.laserInd.c3.src = this.visual.laserInd.c3
+      this.laserInd.current = this.laserInd.c1
     }
     this.dimX = this.visual.dimX
     this.dimY = this.visual.dimY
@@ -448,15 +505,20 @@ class Ship {
     this.stuckTimer = 3
     this.inDanger = false
 
-    this.dashRamp = 3
-    //debug - add weapons from the main weapons object
-    // this.weapons = weapons
-   
+    this.dashRamp = 3 //unfinished
     this.activeWeaponKey = Object.keys(this.weapons)[0]
+
     //debug ship movement
     // this.maxVel = 5
+    this.currency = 0
+    this.inventory = []
   }
   draw() {
+
+    if(this.invulnerable) {
+      ctx.globalAlpha = 0.4;
+      ctx.filter = 'saturate(0)'
+    }
     // just test drawing some kinda shields
     if(this.shields.active) {
       ctx.save()
@@ -477,10 +539,7 @@ class Ship {
     ctx.rotate(this.rotation * pi / 180)
 
 
-    if(this.invulnerable) {
-      ctx.globalAlpha = 0.4;
-      ctx.filter = 'saturate(0)'
-    }
+   
     ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
 
     //dash ind
@@ -491,17 +550,31 @@ class Ship {
     ctx.globalAlpha = 1
     ctx.restore()
 
-    //draw turret
+    //draw turret if ship has one
     if(this.turret) {
       this.rotateTurret()
       ctx.save()
       ctx.translate(this.x,this.y)
       ctx.rotate(this.turretRotation * pi / 180)
-      if(this.invulnerable) {
-        ctx.globalAlpha = 0.4;
-        ctx.filter = 'saturate(0)'
-      }
+      // if(this.invulnerable) {
+      //   ctx.globalAlpha = 0.4;
+      //   ctx.filter = 'saturate(0)'
+      // }
       ctx.drawImage(this.turret, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+      ctx.restore()
+    }
+
+    //draw laserInd if ship has one
+    if(this.laserInd != null) {
+      ctx.save()
+      ctx.translate(this.x,this.y)
+      ctx.rotate(this.rotation * pi / 180)
+      // if(this.invulnerable) {
+      //   ctx.globalAlpha = 0.4;
+      //   ctx.filter = 'saturate(0)'
+      // }
+
+      ctx.drawImage(this.laserInd.current, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
       ctx.restore()
     }
 
@@ -524,8 +597,25 @@ class Ship {
       ctx.stroke()
       ctx.closePath()
       ctx.restore()
+
+      // draw boundingbox
+      ctx.save()
+      ctx.translate(this.x,this.y)
+      ctx.rotate(this.rotation * pi / 180)
+      ctx.beginPath()
+      ctx.lineWidth = 2
+      ctx.globalAlpha = 0.25
+      ctx.strokeStyle = 'white'
+      ctx.rect(0 - this.dimX/2,0 - this.dimY/2,this.dimX, this.dimY)
+      ctx.stroke()
+      ctx.closePath()
+      ctx.restore()
     }
 
+    
+    ctx.globalAlpha = 1
+    ctx.filter = 'none'
+    
   }
   toggleShields() {
     if(this.shields.active) {
@@ -771,53 +861,44 @@ class Ship {
 
   fire(e) {
     if(this.activeWeaponKey == 'front_laser_double') {
-
+      let weapon = this.weapons['front_laser_double']
+      if(weapon.charges < 1) return
+      weapon.charges--
+      this.weapons['front_laser_double'].rechargeInit()
       laserbeams.push(new LaserBeam(this.x,this.y,this.id,this.rotation,this.weapons.front_laser_double.damage,e))
 
-      laserbeams.push(new LaserBeam(this.x + 30,this.y + 30,this.id,this.rotation,this.weapons.front_laser_double.damage,e))
-      //this code is important, but also bad and clunky, so i moved it to LaserBeam class and stole a good function for detecting collision with a circular hitbox
-      enemyships.forEach(ship=> { 
-        return
-        let shipToPlayer = (Math.atan2(player.y - ship.y, player.x - ship.x) * 180) / pi + 90
-        let playerAngle = this.rotation
-        console.log('Player angle before wraparound: ' + playerAngle)
-
-        if(playerAngle >= 360) {
-          playerAngle -= 360
-        }
-        let errorMargin = 10;
-        console.log('Margin of error between:')
-        console.log(playerAngle - errorMargin + 360)
-        console.log(playerAngle + errorMargin + 360)
-        console.log('-----------------')
-
-        console.log('Ship to player angle: ' + shipToPlayer)
-        console.log('Player angle: ' + playerAngle)
-
-        if(
-          Math.abs(playerAngle - shipToPlayer) < 180 + errorMargin &&
-          Math.abs(playerAngle - shipToPlayer) > 180 - errorMargin 
-        ) {
-          console.log('hit')
-          ship.markForHit = true // this ship will be used as a candidate for being hit by the laser, but only after it's proven it is the closest of the marked to the player
-
-        }
-          
-        })
+      laserbeams.push(new LaserBeam(this.x + 30,this.y + 30,this.id,this.rotation,this.weapons.front_laser_double.damage,e)) // unfinished
     }
     if(this.activeWeaponKey == 'debug') {
       fire(e)
     }
   }
+  updateWeapons() {
+    if(this.activeWeaponKey == 'front_laser_double') {
+      let weapon = this.weapons['front_laser_double']
+      if(weapon.rechargeTime <= 0 && weapon.charges < weapon.chargesMax) {
+        weapon.charges++
+        if(debug) console.log('Laser recharged.')
+        weapon.rechargeInit()
+      }
+      if(weapon.charges != weapon.chargesMax) {
+        weapon.rechargeTime--
+      }
 
+      if(weapon.charges == 0) this.laserInd.current = this.laserInd.c0
+      if(weapon.charges == 1) this.laserInd.current = this.laserInd.c1
+      if(weapon.charges == 2) this.laserInd.current = this.laserInd.c2
+      if(weapon.charges == 3) this.laserInd.current = this.laserInd.c3
+    }
+  }
   update() {
     this.steer()
     this.accelerate()
     this.move()
     this.decelerate()
     this.saveGhost()
-    this.drawGhosts()
     this.dashRecharge()
+    this.updateWeapons()
   }
 }
 
@@ -944,6 +1025,33 @@ class LaserBeam {
   }
 }
 
+class DockingStation {
+  constructor(x,y,rotation,stationData) {
+
+    this.dimX = stationData.visual.dimX
+    this.dimY = stationData.visual.dimY
+    this.sprite = new Image()
+    this.sprite.src = stationData.visual.base
+    //universal properties
+    this.x = x
+    this.y = y
+    this.rotation = rotation
+  }
+  draw() {
+    ctx.save()
+    ctx.translate(this.x,this.y)
+    ctx.rotate(this.rotation * pi / 180)
+    ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+    ctx.restore()
+
+    this.rotation += 0.1
+    if(this.rotation > 360) this.rotation = 0
+  }
+  update() {
+    console.log('Update code for DockingStation.')
+  }
+}
+
 class Projectile {
   constructor(x,y,radius,color,velocity,type) {
     if(!type) console.log('Error: Missing projectile type.')
@@ -1058,8 +1166,6 @@ class Projectile {
   }
   update() {
     this.saveGhost()
-    this.drawGhosts()
-    this.draw();
     this.x += this.velocity.x
     this.y += this.velocity.y
     // damagefalloff should affect damage, but how to calculate the distance traveled? 
@@ -1114,7 +1220,7 @@ class EnemyShip {
 
     this.armor = 10
     this.invulnerable = false;
-    this.invulWindow = 500;
+    this.invulWindow = 200;
     this.destroy = false
     this.dead = false
     this.exploded = false
@@ -1131,7 +1237,7 @@ class EnemyShip {
     this.dimX = 128 
     this.dimY = 128
     this.weight = 35
-    this.fireTimerInit = 30
+    this.fireTimerInit = 90
     this.fireTimer = this.fireTimerInit
     this.markForHit = false;
 
@@ -1168,6 +1274,17 @@ class EnemyShip {
       ctx.translate(0,25)
       ctx.fillText("Ship to player:" + shipToPlayer, 0 - this.dimX/2, 0 - this.dimY/2);
       ctx.restore()
+
+      //draw hitbox
+      ctx.save() 
+      ctx.beginPath()
+      ctx.arc(this.x,this.y,this.radius,0,pi*2,false)
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.closePath()      
+      ctx.restore()
+
     }
   }
   followPlayer() {
@@ -1187,20 +1304,23 @@ class EnemyShip {
 
 
     // the old rotation code
-    // gsap.fromTo(this,
-    //   {rotation: this.rotation},
-    //   {rotation: 90 + (angle * 180) / pi, duration: 1}
-    // )
+    gsap.fromTo(this,
+      {rotation: this.rotation},
+      {rotation: 90 + (angle * 180) / pi, duration: 1}
+    )
     
-    this.rotation = 90 + (angle * 180) / pi
 
-    if(this.rotation < 0) this.rotation += 360
+    //issue, this needs to be used but slightly better
+    // this.rotation = 90 + (angle * 180) / pi
+
+    // if(this.rotation < 0) this.rotation += 360
 
 
-    if(this.rotation > 359) this.rotation = 0
+    // if(this.rotation > 359) this.rotation = 0
 
     // console.log('Rotation in deg: ' + this.rotation) 
     
+
     //issue here is the problem with player and enemy colliding -  the enemy ship is constantly accelerating
     
     var dist = Math.hypot(player.x - this.x, player.y - this.y) 
@@ -1264,13 +1384,11 @@ class EnemyShip {
   }
   death() {
     deadShipDialogs.push(new DeadShipDialog(this.x,this.y, 
-      `Some placeholder text before I figure out what goes here.
+      `The ship may be destroyed, but there's still some valuables inside.
       <br><br>
-      Loot: 
-      <br>
-      <span class='loot-item'>• Some scrap </span>
-      <br>
-      <span class='loot-item'>• Cheap laser mount </span>
+      Loot:
+      <span class='loot-item' data-loot='currency' data-lootAmt='5' onclick='gainCurrency(this)'> <br>• Some currency: 5 </span>
+      <span class='loot-item' data-loot='laser_mount' onclick='acquireItem(this.dataset.loot,this)'> <br>• Cheap laser mount </span>
       <br>
       `
       ,this))
@@ -1318,10 +1436,8 @@ class EnemyProjectile {
   //   })
   // }
   update() {
-    // this.drawGhosts()
     this.x += this.velocity.x
     this.y += this.velocity.y
-    this.draw();
   }
 }
 
@@ -1384,8 +1500,6 @@ class Enemy {
     else if(this.velInhibition > 1 && this.velInhibition < 1.02) {
       this.velInhibition = 1;
     }
-    this.draw();
-    
   }
 }
 class Leader extends Enemy {
@@ -1460,7 +1574,6 @@ class Particle {
       this.alpha -= 1;
       if(this.alpha < 1) return
     }
-    this.draw();
   }
 }
 
@@ -1486,7 +1599,6 @@ class Explosion {
     ctx.restore()
   }
   update() {
-    this.draw()
     this.life--
   }
 }
@@ -1570,7 +1682,6 @@ class Debris {
     }
   }
   update() {
-    this.draw()
     this.x += this.velocity.x
     this.y += this.velocity.y
   }
@@ -1637,7 +1748,6 @@ class Asteroid {
     
   }
   update() {
-    this.draw()
     this.x += this.velocity.x
     this.y += this.velocity.y
   }
@@ -1678,7 +1788,7 @@ class DeadShipDialog {
       this.trigger.style.left = (Math.round(this.x) - this.triggerOffset) + 'px'
       this.trigger.style.top = (Math.round(this.y) - this.triggerOffset) + 'px'
     }
-    if(Math.hypot(player.x - this.x, player.y - this.y) < player.dimX*1.5) {
+    if(Math.hypot(player.x - this.x, player.y - this.y) < player.dimX + 20) {
       this.trigger.style.pointerEvents = 'all'
       this.indicator.style.borderColor = 'white'
     } else {
@@ -1731,7 +1841,10 @@ class Dialog { // this is the stupidest shitfuck code
       dialogsVisible.splice(0,1)
     }
     dialogContainer.append(this.visual)
-    pause() //important, whenever a dialog is constructed, it pauses the game, when you click the dialog, it UN-pauses
+    setTimeout(()=>{
+    pause() //issue //terrible-solution- timeouts === bad //important, whenever a dialog is constructed, it pauses the game, when you click the dialog, it UN-pauses
+
+    },50)
   }
 }
 function spawnEnemy() { //deprecated
@@ -1763,7 +1876,7 @@ function spawnEnemy() { //deprecated
 
 function spawnEnemyShip(x,y) {
   console.log('Spawned enemy ship.')
-  enemyships.push(new EnemyShip(centerX,centerY,60,0))
+  enemyships.push(new EnemyShip(centerX,centerY,50,0))
 }
 
 
@@ -1821,11 +1934,11 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   updateHealthBar()
   draw()
   loadRoom(currRoom)
+
+  //debug docking station
+  dockingStations.push(new DockingStation(centerX,centerY, 0, stations['docking_station']))
   // spawnEnemy()
 }
-
-// let player = new Ship(centerX, centerY, 20,0,ships.wasp) // this is bad, really terrible
-
 function generateArmorVisual() {
   console.log('Player armor before generating the visual: ' + player.armor)
   for (let i = 0; i < player.armor; i++) {
@@ -2054,7 +2167,7 @@ function spawnProjectile(e) {
 function drawBackground() {
   ctxBg.beginPath()
   ctxBg.rect(0,0,canvas.width,canvas.height)
-  ctxBg.fillStyle = 'hsl(0,0%,2%)'
+  ctxBg.fillStyle = 'hsl(0,0%,3%)'
   ctxBg.fill()
   ctxBg.closePath()
 }
@@ -2102,6 +2215,8 @@ function draw() {
     particle.update();
   })
 
+  player.update();
+
   // run some code for each player projectile
   projectiles.forEach((projectile, indexProj)=> {
     
@@ -2136,9 +2251,6 @@ function draw() {
       (projectile.x > (canvas.width + projRadius*2 ) || projectile.x < (0 - projRadius*2)) || 
       (projectile.y > (canvas.height + projRadius*2) || projectile.y < (0 - projRadius*2)) 
     ) {
-      // setTimeout(()=> { //issue bad code
-      //   projectiles.splice(indexProj, 1);
-      // },0)
       projectile.dead = true
     }
   })
@@ -2408,8 +2520,6 @@ function draw() {
           projectiles.splice(indexProj, 1);
         },0)
         explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
-        //issue //need a way to calculate score here
-        // enemy.dead = true;
         gsap.to(enemy,{color: explosionColor, duration: 1})
       }
       // hit by machine
@@ -2514,8 +2624,8 @@ function draw() {
 
     if(explosion.life < 1) { //important, object deletion is now happening at the end of draw(), so globalAlpha may frequently break and cause objects to flash
       explosion.dead = true
-      console.log('Explosion marked dead.')
-      console.log(explosion)
+      if(debug) console.log('Explosion marked dead.')
+      if(debug) console.log(explosion)
       return
     }
 
@@ -2653,7 +2763,7 @@ function draw() {
         player.stuckTimer--
       } else {
         player.stuck = true
-        console.log('Player stuck.')
+        if(debug) console.log('Player stuck.')
       }
 
       asteroid.stuckInside = player.id
@@ -2890,61 +3000,11 @@ function draw() {
 
 
 
-  //player mechanics
-  
-  player.update();
-  
-  if(pressedShift) {
-    displayDodgePositions()
-  }
-  if(dodgePosVisible == true && !pressedShift) {
-    windup = 0;
-    dodgePosVisible = false
-  }
-  // draw various UI bits
-  overlaysInfo.forEach((overlay, index) => {
-    overlay.update()
-    if(overlay.dead == true) {
-      overlaysInfo.splice(index,1)
-    }
-  })
-  deadShipDialogs.forEach(dialog => {
-    dialog.update()
-  })
-
-  // code that lights up arrows based on player proximity
-  arrows.forEach(arrow=>{
-    let dist = Math.hypot(
-      player.x -
-      +arrow.dataset.x,
-      player.y -
-      +arrow.dataset.y
-      )
-      
-      if(dist < 120) {
-        arrow.classList.add('close')
-      }
-      else {
-        arrow.classList.remove('close')
-      }
-      
-    })
-  
   
 
-  // bullet fire anim
-  if(fired) {
-    drawTurretFire();
-    // clearTimeout(firedTimer);
-    firedTimer = setTimeout(()=>{
-      fired = false
-    },100)
-  }
+  
 
 
-
-  // cursor, draw this last
-  // drawCursor();
 
   if(debug) {
 
@@ -2988,7 +3048,7 @@ function draw() {
   })
   explosions.forEach((explosion,ind)=> {
     if(explosion.dead) {
-      console.log('The explosion currently removed: x: ' + explosion.x + + 'y: ' + explosion.y + ', has an index of: ' + ind )
+      // console.log('The explosion currently removed: x: ' + explosion.x + + 'y: ' + explosion.y + ', has an index of: ' + ind )
       explosions.splice(ind,1)
     }
   })
@@ -3002,12 +3062,97 @@ function draw() {
 
 
   //draw everything here
+  particles.forEach(particle => {
+    particle.draw()
+  })
 
   laserbeams.forEach(beam => {
     beam.draw()
   })
+  dockingStations.forEach(station => {
+    station.draw()
+  })
+  projectiles.forEach(proj => {
+    proj.drawGhosts()
+    proj.draw()
+  })
 
+  enemyProjectiles.forEach(proj => {
+    // this.drawGhosts() // unfinished
+    proj.draw();
+  })
+  enemies.forEach(enemy => {
+    enemy.draw()
+  })
+  enemyships.forEach(ship => {
+    ship.draw()
+  })
+
+  asteroids.forEach(ast => {
+    ast.draw()
+  })
+  debriss.forEach(debris => {
+    debris.draw()
+  })
+
+  //player drawing
+  player.drawGhosts()
   player.draw()
+
+
+  // bullet fire anim
+  if(fired) {
+    drawTurretFire();
+    // clearTimeout(firedTimer);
+    firedTimer = setTimeout(()=>{
+      fired = false
+    },100)
+  }
+
+  explosions.forEach(explosion => {
+    explosion.draw()
+  })
+
+  if(pressedShift) {
+    displayDodgePositions()
+  }
+  if(dodgePosVisible == true && !pressedShift) {
+    windup = 0;
+    dodgePosVisible = false
+  }
+
+   // draw various UI bits
+   overlaysInfo.forEach((overlay, index) => {
+    overlay.update()
+    if(overlay.dead == true) {
+      overlaysInfo.splice(index,1)
+    }
+  })
+  deadShipDialogs.forEach(dialog => {
+    dialog.update()
+  })
+
+  // code that lights up arrows based on player proximity
+  arrows.forEach(arrow=>{
+    let dist = Math.hypot(
+      player.x -
+      +arrow.dataset.x,
+      player.y -
+      +arrow.dataset.y
+      )
+      
+      if(dist < 120) {
+        arrow.classList.add('close')
+      }
+      else {
+        arrow.classList.remove('close')
+      }
+      
+    })
+  
+
+  // cursor, draw this last
+  // drawCursor();
 
   drawId = requestAnimationFrame(draw)
   if(gameover) cancelAnimationFrame(drawId);
@@ -3034,7 +3179,79 @@ function initBackground() {
 // player.draw();
 initBackground()
 
+
 // utility functions 
+
+
+
+// polygon objects are an array of vertices forming the polygon
+//     var polygon1=[{x:100,y:100},{x:150,y:150},{x:50,y:150},...];
+// The polygons can be both concave and convex
+// return true if the 2 polygons are colliding 
+
+function polygonsCollide(p1,p2){
+  // turn vertices into line points
+  var lines1=verticesToLinePoints(p1);
+  var lines2=verticesToLinePoints(p2);
+  // test each poly1 side vs each poly2 side for intersections
+  for(i=0; i<lines1.length; i++){
+  for(j=0; j<lines2.length; j++){
+      // test if sides intersect
+      var p0=lines1[i][0];
+      var p1=lines1[i][1];
+      var p2=lines2[j][0];
+      var p3=lines2[j][1];
+      // found an intersection -- polys do collide
+      if(lineSegmentsCollide(p0,p1,p2,p3)){return(true);}
+  }}
+  // none of the sides intersect
+  return(false);
+}
+// helper: turn vertices into line points
+function verticesToLinePoints(p){
+  // make sure polys are self-closing
+  if(!(p[0].x==p[p.length-1].x && p[0].y==p[p.length-1].y)){
+      p.push({x:p[0].x,y:p[0].y});
+  }
+  var lines=[];
+  for(var i=1;i<p.length;i++){
+      var p1=p[i-1];
+      var p2=p[i];
+      lines.push([ 
+          {x:p1.x, y:p1.y},
+          {x:p2.x, y:p2.y}
+      ]);
+  }
+  return(lines);
+}
+// helper: test line intersections
+// point object: {x:, y:}
+// p0 & p1 form one segment, p2 & p3 form the second segment
+// Get interseting point of 2 line segments (if any)
+// Attribution: http://paulbourke.net/geometry/pointlineplane/
+function lineSegmentsCollide(p0,p1,p2,p3) {
+  var unknownA = (p3.x-p2.x) * (p0.y-p2.y) - (p3.y-p2.y) * (p0.x-p2.x);
+  var unknownB = (p1.x-p0.x) * (p0.y-p2.y) - (p1.y-p0.y) * (p0.x-p2.x);
+  var denominator  = (p3.y-p2.y) * (p1.x-p0.x) - (p3.x-p2.x) * (p1.y-p0.y);        
+
+  // Test if Coincident
+  // If the denominator and numerator for the ua and ub are 0
+  //    then the two lines are coincident.    
+  if(unknownA==0 && unknownB==0 && denominator==0){return(null);}
+
+  // Test if Parallel 
+  // If the denominator for the equations for ua and ub is 0
+  //     then the two lines are parallel. 
+  if (denominator == 0) return null;
+
+  // test if line segments are colliding
+  unknownA /= denominator;
+  unknownB /= denominator;
+  var isIntersecting=(unknownA>=0 && unknownA<=1 && unknownB>=0 && unknownB<=1)
+
+  return(isIntersecting);
+}
+
 
 // calculate line and circle intersection
 // [x0,y0] to [x1,y1] define a line segment
@@ -3380,6 +3597,17 @@ function updateScore(arg) {
   updateScoreVisual()
 }
 
+function gainCurrency(source) {
+  amt = +source.dataset.lootamt
+  player.currency += amt
+  console.log('Gained currency: ' + amt)
+  source.remove()
+}
+function acquireItem(itemKey,source) {
+  player.inventory.push(items[itemKey])
+  console.log('Item acquired: ' + itemKey)
+  if(source) source.remove()
+}
 function gainAmmo(type) {
   if(type == 'regular') {
     ammoRegular++
@@ -3603,11 +3831,8 @@ function displayPopup(arg, x, y) {
 function detonate() {
   projectiles.forEach((projectile,index)=> {
     if(projectile.type == 'explosive') {
-      
-      //  setTimeout(()=> { //issue // the timeout is kinda janking things up, it doesn't remove everything but pushes 1 explosion per projectile anyways
       explosions.push(new Explosion(projectile.x,projectile.y,explosionRadius, explosionColor))
       projectile.dead = true
-      // },0)
     }
   })
 }
@@ -3662,7 +3887,7 @@ function generateLayout() {
   // add additional 6-8 rooms, making the main branch 6-9 rooms total
   // this ia  fucking mess but it moreorless doesn't matter, it's just a matter of keeping indexing consistent ↓↓↓↓↓
   
-  var roomNum = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6 //issue //i have no idea how the room index works anymore
+  var roomNum = Math.abs(Math.round(Math.random() * 4 - 0.5)) + 6 // room index is only incremented after generating the 2nd room, due to how indexing works in JS
   console.log('Total room number: ' + roomNum)
   if(roomNum >= 10) roomNum = 9 // hard set the roomnum if it actually overflows
   while(roomIndex < roomNum - 1) {
@@ -3768,33 +3993,29 @@ function generateMap() {
 }
 
 let roomCont = [
-  // {
-  //   key: 'asteroids',
-  //   count: 10,
-  // },
-  // {
-  //   key: 'asteroids',
-  //   count: 10,
-  // },
-  // {
-  //   key: 'asteroids',
-  //   count: 10,
-  // },
-  // {
-  //   key: 'enemy-ship',
-  //   count: 1,
-  // },
-  // {
-  //   key: 'debris',
-  //   count: 3,
-  // },
-  // {
-  //   key: 'debris',
-  //   count: 3,
-  // },
   {
-    key: 'debris-field',
-    count: 15,
+    key: 'asteroids',
+    count: 10,
+  },
+  {
+    key: 'asteroids',
+    count: 10,
+  },
+  {
+    key: 'asteroids',
+    count: 10,
+  },
+  {
+    key: 'enemy-ship',
+    count: 1,
+  },
+  {
+    key: 'debris',
+    count: 3,
+  },
+  {
+    key: 'debris',
+    count: 3,
   },
   {
     key: 'debris-field',
@@ -3804,18 +4025,20 @@ let roomCont = [
     key: 'debris-field',
     count: 15,
   },
-  // {
-  //   key: 'empty',
-  // },
-  // {
-  //   key: 'empty',
-  // },
   {
-    key: 'game_intro', // this key must always be the last, before i redesign this array to be an object with keys that identify each property
+    key: 'empty',
+  },
+  {
+    key: 'empty',
+  },
+  {
+    key: 'game_intro', 
   },
 
 ]
-
+let roomContGameIntro = {
+  key: 'game_intro', //issue not the best fix but works for now
+}
 function randomPropertyFrom(obj) {
   var keys = Object.keys(obj);
   return obj[keys[ keys.length * Math.random() << 0]];
@@ -3825,7 +4048,7 @@ function generateRooms() {
 
   rooms.forEach((room,index)=> {
     if(room.type == 'entrance' && sectorIndex == 0) {
-      room.contents.push(roomCont[roomCont.length - 1])
+      room.contents.push(roomContGameIntro)
       room.dialog = dialogs['game_intro']
     }
     
@@ -3870,6 +4093,10 @@ function generateSector() {
 }
 
 function travel(x,y,dir) {
+  if(player.stuck) {
+    console.log('Player stuck!! Player stuck!!!!!! Unable to travel.')
+    return
+  }
   console.log('|--traveled--|')
 
   // clear room
@@ -3883,7 +4110,7 @@ function travel(x,y,dir) {
     console.log('There is no room over there.')
     return
   }
-  player.stuck = false //issue a weird quirk
+  player.stuck = false //issue player.stuck can stay true after leaving a room //idea should prevent the player from leaving if he is stuck inside something
   spawnPlayer(dir)
   currRoom = destination
   console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
@@ -4003,6 +4230,7 @@ function loadRoom(room) {
   }
 }
 function clearRoom() {
+  // ghosts = []
   projectiles = []
   particles = []
   enemies = []
