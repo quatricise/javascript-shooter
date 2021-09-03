@@ -37,6 +37,9 @@ let ghosts = []
 let ghostNumber = 5
 let ghostOpacity = 0.3
 
+let menuCont = document.querySelector('#menu-container')
+let menus = Array.from(document.querySelectorAll('.menu'))
+
 let modal = document.querySelector('#modal-main')
 let dialogGameover = document.querySelector('.dialog.game-over')
 let dialogStart = document.querySelector('.dialog.game-start')
@@ -46,19 +49,21 @@ let scoreTop = document.querySelector('#score-top')
 let scoreDialog = document.querySelector('#score-dialog')
 let wavesDialog = document.querySelector('#waves-dialog')
 
-let mapContainer = document.querySelector('#map-container')
+// let mapContainer = document.querySelector('#map-container')
 let mapIcon = document.querySelector('.map-icon')
 let mapOpen = false;
 let inventoryOpen = false;
-let inventoryContainer = document.querySelector('#inventory-container')
+let inventoryGUI = document.querySelector('#inventory')
 let invIcon = document.querySelector('.inv-icon');
 
 let shipSelectCont = document.querySelector('.ship-select-cont')
 
+let shipOverviewGUI = document.querySelector('#ship-overview')
+
 let arrowContainer = document.querySelector('#arrow-container')
 let dialogContainer = document.querySelector('#dialog-container')
 
-let sectorMap = document.querySelector('#sector-map')
+let sectorMapGUI = document.querySelector('#sector-map')
 
 let arrows = Array.from(document.querySelectorAll('.arrow'))
 arrows[0].dataset.direction = 'left'
@@ -73,6 +78,24 @@ arrows[2].dataset.y = 0
 arrows[3].dataset.direction = 'down'
 arrows[3].dataset.x = centerX
 arrows[3].dataset.y = ch
+
+function setOnclickForArrowsTo(condition) {
+  if(condition) {
+    arrows[0].setAttribute('onclick', 'travel("left")')
+    arrows[1].setAttribute('onclick', 'travel("right")')
+    arrows[2].setAttribute('onclick', 'travel("up")')
+    arrows[3].setAttribute('onclick', 'travel("down")')
+    arrows.forEach(arr => {
+      arr.classList.add('debug')
+    })
+  }
+  else {
+    arrows[0].removeAttribute('onclick')
+    arrows[1].removeAttribute('onclick')
+    arrows[2].removeAttribute('onclick')
+    arrows[3].removeAttribute('onclick')
+  }
+}
 
 let dispAmmoRegular = document.querySelector('#ammo-regular')
 let dispAmmoShrapnel = document.querySelector('#ammo-shrapnel')
@@ -171,6 +194,10 @@ let debriss = []
 
 let dockingStations = []
 
+// arrays for UI and overlay objects
+let hints = []
+
+
 const projRadius = 5
 const projectileSpeed = 9
 let shrapnelRadiusMult = 1.5
@@ -188,7 +215,14 @@ let explosionRadius = 220
 
 let items = {
   laser_mount: {
+    title: 'Laser Mount',
     description: 'Cheap laser mount.'
+  },
+  universal_mount: {
+    title: 'Universal Weapon Mount',
+    description: 
+    `The coveted universal weapon mount is one of the most precious pieces of technology in the galaxy. 
+    Can be used to attach any weapon to any ship, many potential drawbacks may result from using this equipment unwisely.`
   },
   
 }
@@ -245,15 +279,13 @@ let ships = {
     },
     agility: 2.5,
     armor: 8,
-    dodgeDistance: {
-      x: dodgeDistance,
-      y: dodgeDistance,
-    },
+    dodgeDistance: dodgeDistance,
     maxDodge: 550,
     maxVel: 12,
     acceleration: 4,
     backAccel: 1,
     steerSpeed: 3,
+    steerWindupMax: 8,
     reactorPower: 2,
     energyMax: 10,
     weapons: {
@@ -294,15 +326,13 @@ let ships = {
     },
     agility: 3,
     armor: 10,
-    dodgeDistance: {
-      x: dodgeDistance,
-      y: dodgeDistance,
-    },
+    dodgeDistance: dodgeDistance,
     maxDodge: 650,
     maxVel: 15,
     acceleration: 3,
     backAccel: 1,
     steerSpeed: 3.5,
+    steerWindupMax: 18,
     reactorPower: 2,
     energyMax: 10,
     weapons: {
@@ -339,15 +369,13 @@ let ships = {
     },
     agility: 1.2,
     armor: 12,
-    dodgeDistance: {
-      x: dodgeDistance,
-      y: dodgeDistance,
-    },
+    dodgeDistance: dodgeDistance,
     maxDodge: 350,
     maxVel: 10,
     acceleration: 2,
     backAccel: 1,
     steerSpeed: 1.2,
+    steerWindupMax: 8,
     reactorPower: 4,
     energyMax: 30,
     weapons: {},
@@ -381,15 +409,13 @@ let ships = {
     },
     agility: 1.5,
     armor: 15,
-    dodgeDistance: {
-      x: dodgeDistance,
-      y: dodgeDistance,
-    },
+    dodgeDistance: dodgeDistance,
     maxDodge: 700,
     maxVel: 10,
     acceleration: 2,
     backAccel: 1,
     steerSpeed: 1.75,
+    steerWindupMax: 8,
     reactorPower: 4,
     energyMax: 30,
     weapons: {
@@ -417,6 +443,7 @@ let ships = {
 }
 let stations = {
   docking_station : {
+    name: 'XOR-0-1512',
     visual: {
       base: 'assets/docking_station.png',
       dimX: 512,
@@ -449,7 +476,7 @@ class Ship {
     this.invSlots = shipData.invSlots
     this.autoBreakPower = shipData.autoBreakPower
     this.dashTimerMax = shipData.dashTimerMax
-
+    this.steerWindupMax = shipData.steerWindupMax
     this.visual = shipData.visual
     this.sprite = new Image()
     this.sprite.src = this.visual.base
@@ -489,7 +516,6 @@ class Ship {
     this.x = x
     this.y = y
     this.rotation = rotation
-    this.steerWindupMax = 8
     this.steerWindup = this.steerWindupMax
     this.energy = this.energyMax
     this.velocity = { //basically movement speed, //idea // could be upgraded by some way, as a simple engine upgrade
@@ -499,6 +525,7 @@ class Ship {
 
     this.hidden = false // cloaking idea, perhaps that will be reworked into a % based cloak
     this.invulnerable = false
+    this.dodging = false
     this.dashTimer = 0 //idea it should go up to around 30 or 40 so you can dash once a second just fine
     this.stuck = false
     this.stuckInside = null
@@ -515,9 +542,13 @@ class Ship {
   }
   draw() {
 
-    if(this.invulnerable) {
+    if(this.dodging) {
       ctx.globalAlpha = 0.4;
       ctx.filter = 'saturate(0)'
+    }
+    else if(this.invulnerable) {
+      ctx.globalAlpha = 1
+      ctx.filter = 'saturate(0) brightness(0.8)'
     }
     // just test drawing some kinda shields
     if(this.shields.active) {
@@ -618,10 +649,11 @@ class Ship {
     
   }
   toggleShields() {
-    if(this.shields.active) {
-      this.shields.active = false
-    }
-    else this.shields.active = true
+    // if(this.shields.active) {
+    //   this.shields.active = false
+    // }
+    // else this.shields.active = true
+    this.shields.active = !this.shields.active
   }
   rotateTurret() {
     var angle = Math.atan2(player.y - mouseY, player.x - mouseX);
@@ -641,7 +673,7 @@ class Ship {
   }
 
   saveGhost() {
-    ghosts.push(new Ghost(this.x,this.y,this.rotation,this.visual,this.sprite))
+    ghosts.push(new Ghost(this.x,this.y,this.rotation,this.visual,this.sprite, 'shadow'))
   }
   accelerate() {
     if(!movingForward && !movingBackward) return;
@@ -740,6 +772,9 @@ class Ship {
   }
 
   steer() {
+    if(turningCCW && turningCW) {
+      return
+    }
     if(!turningCCW && !turningCW && this.steerWindup < this.steerWindupMax) {
       this.steerWindup++
     }
@@ -749,11 +784,11 @@ class Ship {
     
     // rotate the player sprite
     if(turningCCW) {
-      this.rotation -= this.steerSpeed / (1 + (this.steerWindup/4))
+      this.rotation -= this.steerSpeed / (1 + (this.steerWindup/this.steerWindupMax))
       if(this.rotation < 0) this.rotation = 359
     }
     if(turningCW) {
-      this.rotation += this.steerSpeed / (1 + (this.steerWindup/4))
+      this.rotation += this.steerSpeed / (1 + (this.steerWindup/this.steerWindupMax))
       if(this.rotation >= 359) this.rotation = 0
     }
     if(this.steerWindup > 0 && (turningCW || turningCCW)) {
@@ -773,43 +808,99 @@ class Ship {
   }
 
 
-  dodge(direction) {
+  // dodge(direction) {
+  //   // console.log(this.dodgeDistance)
+  //   if(dodgeDir !== null) return;
+  //     playerMoved = true
+  //     this.invulnerable = true
+  //     this.dodging = true
+      
+  //     if(direction == 'left') {
+  //       gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'right') {
+  //       gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'up') {
+  //       gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y -= this.dodgeDistance})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'down') {
+  //       gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y += this.dodgeDistance})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'upLeft') {
+  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance / 1.414, y: this.y -= this.dodgeDistance / 1.414})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'downLeft') {
+  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance / 1.414, y: this.y += this.dodgeDistance / 1.414})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'upRight') {
+  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance / 1.414, y: this.y -= this.dodgeDistance / 1.414})
+  //       dodgeDir = direction;
+  //     }
+  //     if(direction == 'downRight') {
+  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance / 1.414, y: this.y += this.dodgeDistance / 1.414})
+  //       dodgeDir = direction;
+  //     }
+  //     this.velocity.x = this.velocity.y = 0
+  // }
+
+  displayDodgeRange() {
+    dodgePosVisible = true;
+    if(windup < 48) windup += 8
+
+    ctx.save()
+    ctx.globalAlpha = windup / 100
+    if(dodgeDir) ctx.globalAlpha *= 0.7
+    ctx.strokeStyle = 'white'
+    ctx.lineWidth = 2.5
+    ctx.fillStyle = 'white';
+    
+    ctx.beginPath()
+    ctx.arc(this.x, this.y, this.dodgeDistance, 0, pi*2, false)
+    ctx.stroke()
+    ctx.closePath()
+    ctx.restore()
+  }
+
+  dodge(direction,ev) {
     // console.log(this.dodgeDistance)
     if(dodgeDir !== null) return;
-      playerMoved = true;
-      player.invulnerable = true;
-      if(direction == 'left') {
-        gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x})
-        dodgeDir = direction;
-      }
-      if(direction == 'right') {
-        gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x})
-        dodgeDir = direction;
-      }
-      if(direction == 'up') {
-        gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y -= this.dodgeDistance.y})
-        dodgeDir = direction;
-      }
-      if(direction == 'down') {
-        gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y += this.dodgeDistance.y})
-        dodgeDir = direction;
-      }
-      if(direction == 'upLeft') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
-        dodgeDir = direction;
-      }
-      if(direction == 'downLeft') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
-        dodgeDir = direction;
-      }
-      if(direction == 'upRight') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y -= this.dodgeDistance.y / 1.414})
-        dodgeDir = direction;
-      }
-      if(direction == 'downRight') {
-        gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance.x / 1.414, y: this.y += this.dodgeDistance.y / 1.414})
-        dodgeDir = direction;
-      }
+      playerMoved = true
+      this.invulnerable = true
+      this.dodging = true
+      
+      let distFromPlayer = Math.hypot(this.x - ev.clientX, this.y - ev.clientY)
+      let distX = ev.clientX - this.x
+      let distY = ev.clientY - this.y
+
+      console.log('Dist x: ' + distX)
+      let distanceRatio = distFromPlayer / this.dodgeDistance
+
+      if(distanceRatio > 1) {
+        distX /= distanceRatio
+        distY /= distanceRatio
+      } 
+      // simplify this for now, just move to where the player clicks
+      gsap.fromTo(this,
+        {
+          x: this.x, 
+          y: this.y,
+        }, 
+        {
+          x: this.x + distX,
+          y: this.y + distY,
+          duration: dodgeSpeed + (dodgeDistance/1200), 
+          onComplete: () => {dodgeFinish()},
+        })
+
+      dodgeDir = direction;
+
       this.velocity.x = this.velocity.y = 0
   }
 
@@ -872,6 +963,9 @@ class Ship {
     if(this.activeWeaponKey == 'debug') {
       fire(e)
     }
+    if(this.activeWeaponKey == null) {
+      new InfoPopup(player.x, player.y - 50, 'No weapons equipped.')
+    }
   }
   updateWeapons() {
     if(this.activeWeaponKey == 'front_laser_double') {
@@ -903,25 +997,28 @@ class Ship {
 }
 
 class Ghost {
-  constructor(x,y,rotation,visual,sprite) {
+  constructor(x,y,rotation,visual,sprite,type) {
     this.x = x
     this.y = y
     this.rotation = rotation
     this.alpha = ghostOpacity
     this.visual = visual
     this.sprite = sprite
+    this.type = type
     this.dimX = this.visual.dimX
     this.dimY = this.visual.dimY
   }
   draw() {
-    ctx.save()
-    ctx.translate(this.x,this.y)
-    ctx.rotate(this.rotation * pi / 180)
-    if(player.invulnerable) ctx.filter = 'saturate(0)'
-    ctx.globalAlpha = this.alpha;
-    ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+    if(this.type == 'shadow') {
 
-    ctx.restore()
+      ctx.save()
+      ctx.translate(this.x,this.y)
+      ctx.rotate(this.rotation * pi / 180)
+      if(player.invulnerable) ctx.filter = 'saturate(0)'
+      ctx.globalAlpha = this.alpha;
+      ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
+      ctx.restore()
+    }
   }
 }
 
@@ -944,7 +1041,7 @@ class LaserBeam {
     this.destY = this.y
     this.lifeMax = 8 //this is the number of frames it'll be visible
     this.life = this.lifeMax
-    this.hypot = cw + 10
+    this.hypot = cw *2
     this.dead = false
     this.hasTarget = false;
     var rad;
@@ -1027,7 +1124,8 @@ class LaserBeam {
 
 class DockingStation {
   constructor(x,y,rotation,stationData) {
-
+    this.id = Math.round(Math.random()*100000000000)
+    this.name = stationData.name
     this.dimX = stationData.visual.dimX
     this.dimY = stationData.visual.dimY
     this.sprite = new Image()
@@ -1036,6 +1134,7 @@ class DockingStation {
     this.x = x
     this.y = y
     this.rotation = rotation
+    this.hintVisible = false;
   }
   draw() {
     ctx.save()
@@ -1044,11 +1143,18 @@ class DockingStation {
     ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
     ctx.restore()
 
-    this.rotation += 0.1
-    if(this.rotation > 360) this.rotation = 0
+    // this.rotation += 0.1
+    // if(this.rotation > 360) this.rotation = 0
   }
   update() {
     console.log('Update code for DockingStation.')
+    //check for player nearby to display hint 
+    let dist = Math.hypot(this.x - player.x, this.y - player.y)
+    if(dist < this.dimX/2) {
+      if(this.hintVisible) return
+      this.hintVisible = true
+      hints.push(new Hint(this.x,this.y, 'Press [E] to interact.',this.id))
+    }
   }
 }
 
@@ -1229,7 +1335,7 @@ class EnemyShip {
     this.hasLineOfSight = false
     this.changingTarget = false
     this.sprite = new Image()
-    this.sprite.src = 'assets/wasp_default.png'
+    this.sprite.src = 'assets/cargo_ship_small.png'
     this.spriteDim = {
       x: 128,
       y: 128,
@@ -1477,7 +1583,6 @@ class Enemy {
         setTimeout(()=>{
           var angle = Math.atan2( player.y - this.y, player.x - this.x);
           gsap.fromTo(this.velocity,{x: this.velocity.x,y: this.velocity.y},{x: Math.cos(angle)*enemySpeed, y: Math.sin(angle)*enemySpeed, duration: 1})
-          playerMoved = false;
         },150)
       }
     } 
@@ -1694,7 +1799,7 @@ class Asteroid {
     this.y = y
     this.rotation = rotation
     this.velocity = velocity
-    this.type = type
+    this.type = type // meaningless property so far
     this.sprite = new Image()
     this.sprite.src = 'assets/asteroid_1.png'
     this.spriteDim = {
@@ -1804,15 +1909,14 @@ class InfoPopup {
     this.x = x
     this.y = y
     this.text = text
-    this.life = 75
+    this.life = 100
     this.dead = false;
-
     this.visual = document.createElement('div')
     this.visual.classList.add('info-blip')
     this.visual.style.position = 'absolute'
     this.visual.style.left = this.x + 'px'
     this.visual.style.top = this.y + 'px'
-    this.visual.innerText = '+2 AMMO'
+    this.visual.innerText = text
     overlayMain.append(this.visual)
     overlaysInfo.push(this)
   }
@@ -1826,9 +1930,20 @@ class InfoPopup {
   }
 }
 
+class Hint {
+  constructor(x,y,text,attachedTo) {
+    this.x = x
+    this.y = y
+    this.text = text
+  }
+  update() {
+    console.log('Do some stuff or maybe not')
+  }
+}
+
 class Dialog { // this is the stupidest shitfuck code
   constructor(text) {
-    console.log('Dialog constructed.')
+    if(debug) console.log('Dialog constructed.')
     dialogContainer.style.display = ''
     this.text = text
     this.visual = document.createElement('div')
@@ -1874,11 +1989,14 @@ function spawnEnemy() { //deprecated
   
 }
 
-function spawnEnemyShip(x,y) {
+function spawnEnemyShip(x = centerX,y = centerY) {
   console.log('Spawned enemy ship.')
-  enemyships.push(new EnemyShip(centerX,centerY,50,0))
+  enemyships.push(new EnemyShip(x,y,50,0))
 }
 
+function spawnDockingStation(x,y) {
+  dockingStations.push(new DockingStation(centerX,centerY, 0, stations['docking_station']))
+}
 
 //badcode this function is a fucking curse
 function init() { //this is a hard reset, this resets (almost) everything to the initial state //issue, alright this is badness, this is gonna break something soon
@@ -1936,7 +2054,6 @@ function init() { //this is a hard reset, this resets (almost) everything to the
   loadRoom(currRoom)
 
   //debug docking station
-  dockingStations.push(new DockingStation(centerX,centerY, 0, stations['docking_station']))
   // spawnEnemy()
 }
 function generateArmorVisual() {
@@ -1962,43 +2079,43 @@ canvas.addEventListener('mousemove', function(e) {
 function determineDodgeDirection() {
   let distLeft = 
   Math.hypot(
-    (player.x - player.dodgeDistance.x) - mouseX, 
+    (player.x - player.dodgeDistance) - mouseX, 
     player.y - mouseY) 
 
   let distRight = 
   Math.hypot(
-    (player.x + player.dodgeDistance.x) - mouseX, 
+    (player.x + player.dodgeDistance) - mouseX, 
     player.y - mouseY) 
 
   let distUp = 
   Math.hypot(
     player.x - mouseX, 
-    (player.y - player.dodgeDistance.y) - mouseY) 
+    (player.y - player.dodgeDistance) - mouseY) 
 
   let distDown = 
   Math.hypot(
     player.x  - mouseX, 
-    (player.y + player.dodgeDistance.y) - mouseY) 
+    (player.y + player.dodgeDistance) - mouseY) 
 
   let distUpLeft = 
   Math.hypot(
-    (player.x - (player.dodgeDistance.x / 1.414)) - mouseX, 
-    (player.y - (player.dodgeDistance.y / 1.414)) - mouseY)
+    (player.x - (player.dodgeDistance / 1.414)) - mouseX, 
+    (player.y - (player.dodgeDistance / 1.414)) - mouseY)
 
   let distDownLeft = 
   Math.hypot(
-    (player.x - (player.dodgeDistance.x / 1.414)) - mouseX, 
-    (player.y + (player.dodgeDistance.y / 1.414)) - mouseY) 
+    (player.x - (player.dodgeDistance / 1.414)) - mouseX, 
+    (player.y + (player.dodgeDistance / 1.414)) - mouseY) 
 
   let distUpRight = 
   Math.hypot(
-    (player.x + (player.dodgeDistance.x / 1.414)) - mouseX, 
-    (player.y - (player.dodgeDistance.y / 1.414)) - mouseY)
+    (player.x + (player.dodgeDistance / 1.414)) - mouseX, 
+    (player.y - (player.dodgeDistance / 1.414)) - mouseY)
 
   let distDownRight = 
   Math.hypot(
-    (player.x + (player.dodgeDistance.x / 1.414)) - mouseX, 
-    (player.y + (player.dodgeDistance.y / 1.414)) - mouseY) 
+    (player.x + (player.dodgeDistance / 1.414)) - mouseX, 
+    (player.y + (player.dodgeDistance / 1.414)) - mouseY) 
 
    
   let min = Math.min(
@@ -2048,26 +2165,31 @@ function determineDodgeDirection() {
 }
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
 
-function processWheelEvents(e) {
+function processWheelEvents(e) { //scroll event listener
   // console.log(e.deltaY)
-  if(pressedShift) {
-    resizeDodge(e)
-  } else {
+  // if(pressedShift) {
+  //   resizeDodge(e)
+  // } else {
     if(e.deltaY > 0) 
     cycleAmmo('normal')
     else if(e.deltaY < 0) 
     cycleAmmo('reverse')
-  }
+  // }
+  if(debug) console.log('Mousewheel events currently used for ammo cycling only.')
 
 }
 function resizeDodge(e) {
+  console.log('resizeDodge() deprecated. Why is this getting called?')
   var resize = e.deltaY / 3
-  if(dodgeDistance <= player.maxDodge && dodgeDistance >= minDodge) {
-    dodgeDistance -= resize;
-    if(dodgeDistance >= player.maxDodge) {
-      dodgeDistance = player.maxDodge
-    } else if(dodgeDistance <= minDodge) {
-      dodgeDistance = minDodge
+
+  if(player.dodgeDistance <= player.maxDodge && 
+    player.dodgeDistance >= minDodge
+  ) {
+    player.dodgeDistance -= resize;
+    if(player.dodgeDistance >= player.maxDodge) {
+      player.dodgeDistance = player.maxDodge
+    } else if(player.dodgeDistance <= minDodge) {
+      player.dodgeDistance = minDodge
     }
   
   } else return;
@@ -2075,9 +2197,9 @@ function resizeDodge(e) {
   if(!dodgeResizing) {
     dodgeResizing = true
   }
-  gsap.fromTo(player.dodgeDistance,{
-    x: player.dodgeDistance.x,
-    y: player.dodgeDistance.y,
+  gsap.fromTo(player,
+    {
+    dodgeDistance: player.dodgeDistance
   },{
     x: dodgeDistance,
     y: dodgeDistance,
@@ -2093,7 +2215,7 @@ canvas.addEventListener('mousedown', function(e) {
     player.fire(e)
   }
   if(pressedShift) {
-    player.dodge(dodgePreview)
+    player.dodge(dodgePreview,e)
   }
 })
 canvas.addEventListener('mouseup', function() {
@@ -2173,6 +2295,7 @@ function drawBackground() {
 }
 
 function drawCursor() {
+  if(!pressedCtrl) return
   ctx.beginPath();
   ctx.arc(mouseX,mouseY,cursorRadius,0,pi * 2, false)
   ctx.strokeStyle = 'hsl(0,100%,100%)'
@@ -2364,11 +2487,11 @@ function draw() {
       
       // when projectile hits an enemy
       if(distance - enemy.radius - projectile.radius < -1) {
-        
         if(Math.random()*9 > 5) {
+          console.log('Your code is bad.')
           gainAmmo('regular')
           gainAmmo('regular')
-          displayPopup('plus-ammo', enemy.x, enemy.y)
+          new InfoPopup(enemy.x, enemy.y, '+2 AMMO')
         }
 
         // calculate enemy slowdown
@@ -2867,8 +2990,8 @@ function draw() {
       },0)
     }
 
-    // check for collision with other asteroids
-    debriss.forEach((deb,debInd)=> {  // this collision detection is x^2 performance-wise, where x = number of asteroids
+    // check for collision with other debris
+    debriss.forEach((deb,debInd)=> {  // this collision detection is x^2 performance-wise, where x = number of debris
       if(deb.id == debris.id) return
 
       let distance = Math.hypot(deb.x - debris.x,deb.y - debris.y) 
@@ -2986,13 +3109,6 @@ function draw() {
         debris.velocity.y += projectile.velocity.y/12 * projectile.power
         projectile.dead = true
 
-        // setTimeout(()=>{
-        //   projectiles.forEach((p,ind)=> {
-        //     if(p.dead == true) 
-        //     projectiles.splice(ind,1)
-        //     console.log('removed projectile upon hitting debris')
-        //   })}
-        // ,0)
       }
     })
   })
@@ -3113,15 +3229,21 @@ function draw() {
     explosion.draw()
   })
 
+  // if(pressedShift) {
+  //   displayDodgePositions()
+  // }
   if(pressedShift) {
-    displayDodgePositions()
+    player.displayDodgeRange()
   }
   if(dodgePosVisible == true && !pressedShift) {
     windup = 0;
     dodgePosVisible = false
   }
 
-   // draw various UI bits
+
+  // draw UI components
+
+
    overlaysInfo.forEach((overlay, index) => {
     overlay.update()
     if(overlay.dead == true) {
@@ -3141,7 +3263,7 @@ function draw() {
       +arrow.dataset.y
       )
       
-      if(dist < 120) {
+      if(dist < 160) {
         arrow.classList.add('close')
       }
       else {
@@ -3310,7 +3432,11 @@ function calcHypotenuse(a, b) {
   return (Math.sqrt((a * a) + (b * b)));
 }
 
-function start() {
+function start(useDebug) {
+  if(useDebug) {
+    debug = true
+    setOnclickForArrowsTo(true)
+  }
   console.log('Called start().')
   drawBackground()
   closeModal();
@@ -3345,39 +3471,47 @@ function processKeydown(e) {
   if(e.code == 'Digit2' ) {
     start();
   }
-  if(e.code == 'KeyE' ) {
-    // endGame() 
+  if(e.code == 'Digit3' ) {
     pause()
-    //basically pause but hardcore //idea this game needs a pause button
+  }
+  if(e.code == 'KeyE') {
+    console.log('Interact.')
+    new InfoPopup(player.x,player.y - 50, 'Interact with (E)')
   }
   if(e.code == 'KeyF' ) {
     detonate()
   }
   if(e.code == 'KeyM' ) {
-    toggleMap()
+    openMenu(sectorMapGUI)
   }
   if(e.code == 'KeyI' ) {
-    toggleInventory()
+    openMenu(inventoryGUI)
   }
-  if(inventoryOpen) return; //important, this might cause me a headache if i forget that it's here
+  if(inventoryOpen) {
+    console.log('Terminated processKeydown(e) due to inventoryOpen == true.')
+    return
+  }
 
   if(e.code == 'KeyR' ) {
     player.toggleShields()
   }
   if(e.code == 'KeyT' ) {
     let arrow = arrows.find(ar => ar.classList.contains('close'))
-    if(arrow) arrow.onclick()
-    // travel(-1,0,'left') //debug
+    if(arrow) {
+      travel(arrow.dataset.direction)
+    } 
+    else {
+      new InfoPopup(centerX,centerY, 'Cannot travel, not near a portal.')
+    }
   }
 
   if(e.code == 'ShiftLeft') {
     pressedShift = true
-    // console.log('[Shift] down')
-    // prepareDodge();
   }
-  // if(e.code == 'ControlLeft') {
-  //   player.dash('left')
-  // }
+  if(e.code == 'ControlLeft') {
+    pressedCtrl = true
+  }
+
   if(e.code == 'Space') {
     player.dash()
   }
@@ -3406,29 +3540,10 @@ function processKeyup(e) {
 
   if(e.code == 'ShiftLeft') {
     pressedShift = false
-    // clearInterval(dodgeWindow)
   }
-
-  // if(e.code == 'KeyA') {
-  //   player.movingLeft = false
-  //   pressedLeft = false
-  //   // player.decelerate()
-  // }
-  // if(e.code == 'KeyD') {
-  //   player.movingRight = false
-  //   pressedRight = false
-  //   // player.decelerate()
-  // }
-  // if(e.code == 'KeyW') {
-  //   player.movingUp = false
-  //   pressedUp = false
-  //   // player.decelerate()
-  // }
-  // if(e.code == 'KeyS') {
-  //   player.movingDown = false
-  //   pressedDown = false
-  //   // player.decelerate()
-  // }
+  if(e.code == 'ControlLeft') {
+    pressedCtrl = false
+  }
   if(e.code == 'KeyA') {
     turningCCW = false
   }
@@ -3443,24 +3558,16 @@ function processKeyup(e) {
   }
 }
 
-//player movement
-
-// function setDodgeOrigin() {
-//   dodgeOrigin = {
-//     x: player.x,
-//     y: player.y,
-//   }
-// }
-
-
 function dodgeFinish() {
   dodgeDir = null;
   player.invulnerable = false;
-  // setDodgeOrigin();
+  player.dodging = false
+  playerMoved = false; //issue bad variable, should be stored inside of player
   windup = 0;
 }
 
 function displayDodgePositions() {
+  console.log('Deprecated. Why is this getting called?')
   dodgePosVisible = true;
   if(windup < 48) windup += 8
   ctx.save()
@@ -3472,7 +3579,7 @@ function displayDodgePositions() {
   //left
   ctx.beginPath();
   ctx.arc(
-    player.x - player.dodgeDistance.x,
+    player.x - player.dodgeDistance,
     player.y,
     player.radius,
     0,
@@ -3486,7 +3593,7 @@ function displayDodgePositions() {
   // right
   ctx.beginPath();
   ctx.arc(
-    player.x + player.dodgeDistance.x,
+    player.x + player.dodgeDistance,
     player.y,
     player.radius,
     0,
@@ -3501,7 +3608,7 @@ function displayDodgePositions() {
   ctx.beginPath();
   ctx.arc(
     player.x,
-    player.y - player.dodgeDistance.y,
+    player.y - player.dodgeDistance,
     player.radius,
     0,
     pi * 2, 
@@ -3515,7 +3622,7 @@ function displayDodgePositions() {
   ctx.beginPath();
   ctx.arc(
     player.x,
-    player.y + player.dodgeDistance.y,
+    player.y + player.dodgeDistance,
     player.radius,
     0,
     pi * 2, 
@@ -3528,8 +3635,8 @@ function displayDodgePositions() {
   // upLeft
   ctx.beginPath();
   ctx.arc(
-    player.x - (player.dodgeDistance.x / 1.414),
-    player.y - (player.dodgeDistance.y / 1.414),
+    player.x - (player.dodgeDistance / 1.414),
+    player.y - (player.dodgeDistance / 1.414),
     player.radius,
     0,
     pi * 2, 
@@ -3542,8 +3649,8 @@ function displayDodgePositions() {
   // downLeft
   ctx.beginPath();
   ctx.arc(
-    player.x - (player.dodgeDistance.x / 1.414),
-    player.y + (player.dodgeDistance.y / 1.414),
+    player.x - (player.dodgeDistance / 1.414),
+    player.y + (player.dodgeDistance / 1.414),
     player.radius,
     0,
     pi * 2, 
@@ -3556,8 +3663,8 @@ function displayDodgePositions() {
   // upRight
   ctx.beginPath();
   ctx.arc(
-    player.x + (player.dodgeDistance.x / 1.414),
-    player.y - (player.dodgeDistance.y / 1.414),
+    player.x + (player.dodgeDistance / 1.414),
+    player.y - (player.dodgeDistance / 1.414),
     player.radius,
     0,
     pi * 2, 
@@ -3570,8 +3677,8 @@ function displayDodgePositions() {
   // downRight
   ctx.beginPath();
   ctx.arc(
-    player.x + (player.dodgeDistance.x / 1.414),
-    player.y + (player.dodgeDistance.y / 1.414),
+    player.x + (player.dodgeDistance / 1.414),
+    player.y + (player.dodgeDistance / 1.414),
     player.radius,
     0,
     pi * 2, 
@@ -3584,6 +3691,8 @@ function displayDodgePositions() {
   ctx.restore()
 }
 function updateScore(arg) {
+  // console.log('Accidentally called updateScore. This is deprecated.')
+  // return
   switch (arg) {
     case 'shrink-enemy' : {
       score += 1;
@@ -3600,12 +3709,14 @@ function updateScore(arg) {
 function gainCurrency(source) {
   amt = +source.dataset.lootamt
   player.currency += amt
-  console.log('Gained currency: ' + amt)
+  if(debug) console.log('Gained currency: ' + amt)
+  new InfoPopup(player.x, player.y - 50, `Gained ${amt} currency.`)
   source.remove()
 }
 function acquireItem(itemKey,source) {
   player.inventory.push(items[itemKey])
-  console.log('Item acquired: ' + itemKey)
+  if(debug) console.log('Item acquired: ' + itemKey)
+  new InfoPopup(player.x, player.y - 50, `Acquired item: ${items[itemKey].title}.`)
   if(source) source.remove()
 }
 function gainAmmo(type) {
@@ -3671,26 +3782,51 @@ function updateArrows() {
   }
 }
 function toggleMap() {
-  mapContainer.classList.toggle('hidden')
+  sectorMapGUI.classList.toggle('hidden')
   mapIcon.classList.toggle('selected')
   
-  inventoryContainer.classList.add('hidden')
+  inventory.classList.add('hidden')
   invIcon.classList.remove('selected')
 
   inventoryOpen = false
   mapOpen = !mapOpen
 }
+
+
+function openMenu(menu) {
+  if(debug) console.log(menu)
+  menuCont.classList.remove('hidden')
+  let ind = menus.indexOf(menu)
+
+  menus.forEach(menu => {
+    if(menus[ind] == menu) {
+      menu.classList.toggle('hidden')
+      return
+    }
+    else {
+      menu.classList.add('hidden')
+    }
+  })
+  if(menus.find(menu => !menu.classList.contains('hidden')) == undefined) { //basically check if all menus are hidden
+    menuCont.classList.add('hidden')
+    console.log('hiding the menuCont')
+  }
+  // console.log('openMenu(): Opened menu:' + ind)
+}
 function toggleInventory() {
-  inventoryContainer.classList.toggle('hidden')
+  console.log('should be deprecated and never used, somewhere an error exists...')
+  inventory.classList.toggle('hidden')
   invIcon.classList.toggle('selected')
   
-  mapContainer.classList.add('hidden')
+  sectorMapGUI.classList.add('hidden')
   mapIcon.classList.remove('selected')
 
   inventoryOpen = !inventoryOpen
   mapOpen = false
 }
 function updateScoreVisual() {
+  // if(debug) console.log('updateScoreVisual: deprecated.') 
+  // return
   scoreTop.innerHTML = score;
 }
 function updateAmmoVisual() {
@@ -3788,45 +3924,15 @@ function closeModal() {
   modal.style.display = 'none'
 }
 
-function displayPopup(arg, x, y) {
+function displayPopup(arg, x, y, text = "You did not specify text (argument).") {
+  console.log('displayPopup(): deprecated. Error somewhere.')
   if(arg == 'plus-ammo') {
     var info = new InfoPopup(x, y, '+2 AMMO')
   }
+  if(arg == 'acquire-item') {
+    var info = new InfoPopup(x, y, '+2 AMMO')
+  }
 }
-
-//neon effect experiment
-
-// var drawRectangle = function(x, y, w, h, border){
-//   ctx.beginPath();
-//   ctx.moveTo(x+border, y);
-//   ctx.lineTo(x+w-border, y);
-//   ctx.quadraticCurveTo(x+w-border, y, x+w, y+border);
-//   ctx.lineTo(x+w, y+h-border);
-//   ctx.quadraticCurveTo(x+w, y+h-border, x+w-border, y+h);
-//   ctx.lineTo(x+border, y+h);
-//   ctx.quadraticCurveTo(x+border, y+h, x, y+h-border);
-//   ctx.lineTo(x, y+border);
-//   ctx.quadraticCurveTo(x, y+border, x+border, y);
-//   ctx.closePath();
-//   ctx.stroke();
-// }
-// var neonRect = function(x,y,w,h,r,g,b){
-// ctx.shadowColor = "rgb("+r+","+g+","+b+")";
-// ctx.shadowBlur = 10;
-// ctx.strokeStyle= "rgba("+r+","+g+","+b+",0.2)";
-// ctx.lineWidth=7.5;
-// drawRectangle(x,y,w,h,1.5);
-// };
-
-// function addGlow(x, y){
-//   ctx.globalCompositeOperation = "lighter";
-//   neonRect(25+x,25+y,50,50,243,243,21);
-//   neonRect(225-x,25+y,50,50,193,253,51);
-//   neonRect(25+x,225-y,50,50,255,153,51);
-//   neonRect(225-x,225-y,50,50,252,90,184);
-//   neonRect(125,125,50,50,13,213,252); 
-//   ctx.globalCompositeOperation = "normal";
-// }
 
 function detonate() {
   projectiles.forEach((projectile,index)=> {
@@ -3845,17 +3951,44 @@ class Room {
     this.index = index
     this.type = type
 
+    // essentially if a side == portal, you can travel that direction, direction determines the x and y of the next room, left means x = x -1, y = y etc....
+    this.left = left 
+    this.right = right
+    this.top = top
+    this.bottom = bottom
+    this.objective = null
+    this.cleared = false;
+    
+    this.contents = []
+    this.dialog = null
+  }
+  spawnAsteroid() {
+    console.log('room.spawnAsteroid(): Room method that might get called based on type of room and type of content it houses.')
+    console.log('Simplified asteroid spawning for testing purposes.')
+    asteroids.push(new Asteroid(0,0,0,{x: 0.2, y: 0.7},'basic'))
+  }
+  update() {
+    console.log('This method will operate the whole room logic, update internal clocks and call methods of the room.')
+  }
+}
+
+class Room_Asteroid extends Room { // not use this
+  constructor(x,y,index,type,left,right,top,bottom) {
+    super(x,y,index,type,left,right,top,bottom)
+    this.x = x
+    this.y = y
+    this.index = index
+    this.type = type
+
     this.left = left
     this.right = right
     this.top = top
     this.bottom = bottom
-
+    this.objective = null
     this.cleared = false;
-    // essentially if a side == portal, you can travel that direction, direction determines the x and y of the next room, left means x = x -1, y = y etc....
-
-    
     this.contents = []
     this.dialog = null
+    console.log('Warning: Do not use this class, so far it isnt finished')
   }
 }
 
@@ -3970,75 +4103,124 @@ function generateLayout() {
 function generateMap() {
   // make the empty rooms
   for (let i = 0; i < map.x * map.y; i++) {
-    var room = document.createElement("div");
-    room.classList.add("room");
-    sectorMap.append(room);
+
+    var room = document.createElement('div');
+    room.classList.add('room', 'empty');
+
+    var tooltip = document.createElement('div')
+    tooltip.classList.add('room-tooltip')
+
+    room.append(tooltip)
+    sectorMapGUI.append(room);
+
   }
   // add additional rooms inside them?????? //issue, this is stupid, it all has to be connected with rooms[], the class Room needs to contain the visual, and the visual needs to contain the populated rooms
   // it's simply dumb to reference and update multiple unconnected arrays and objects and variables
   for (let i = 0; i < rooms.length; i++) {
 
-    var room = document.createElement('div') 
     var index = (rooms[i].x + 0) + (rooms[i].y + 0) *8
 
-    room.classList.add('test-room')
-    room.dataset.x = rooms[i].x
-    room.dataset.y = rooms[i].y
-    room.onclick = teleport
+    sectorMapGUI.childNodes[index].dataset.x = rooms[i].x
+    sectorMapGUI.childNodes[index].dataset.y = rooms[i].y
+    sectorMapGUI.childNodes[index].onclick = teleport
 
-    sectorMap.childNodes[index].append(room)
+    
+    sectorMapGUI.childNodes[index].classList.replace('empty','filled')
   }
   
   
 }
 
-let roomCont = [
-  {
-    key: 'asteroids',
-    count: 10,
+// let roomCont = [
+//   {
+//     key: 'asteroids',
+//     count: 10,
+//   },
+//   {
+//     key: 'enemy-ship',
+//     count: 1,
+//   },
+//   {
+//     key: 'debris',
+//     count: 3,
+//   },
+//   {
+//     key: 'debris-field',
+//     count: 15,
+//   },
+//   {
+//     key: 'empty',
+//   },
+//   {
+//     key: 'docking-station',
+//   },
+// ]
+let roomTypes = {
+  docking_station: {
+    permittedContent: [
+      'docking_station',
+      'debris_small',
+    ],
+    max_per_sector: 1,
   },
-  {
-    key: 'asteroids',
-    count: 10,
+  asteroid_belt: {
+    permittedContent: [
+      'asteroids',
+      'asteroids_drifting',
+    ],
+    max_per_sector: 1,
   },
-  {
-    key: 'asteroids',
-    count: 10,
-  },
-  {
-    key: 'enemy-ship',
-    count: 1,
-  },
-  {
-    key: 'debris',
-    count: 3,
-  },
-  {
-    key: 'debris',
-    count: 3,
-  },
-  {
-    key: 'debris-field',
-    count: 15,
-  },
-  {
-    key: 'debris-field',
-    count: 15,
-  },
-  {
-    key: 'empty',
-  },
-  {
-    key: 'empty',
-  },
-  {
-    key: 'game_intro', 
-  },
-
-]
-let roomContGameIntro = {
-  key: 'game_intro', //issue not the best fix but works for now
 }
+
+let roomCont = {
+  asteroids: {
+    count: 10,
+    load() {
+      distributeAsteroids(this.count)
+    }
+  },
+  enemy_ship: {
+    count: 1,
+    load() {
+      spawnEnemyShip()
+    }
+  },
+  debris_small: {
+    count: 3,
+    count_min: 1,
+    count_max: 3,
+    load() {
+      distributeDebris(this.count)
+    }
+  },
+  debris_field: {
+    count: 15,
+    load() {
+      distributeDebris(this.count)
+    }  
+  },
+  empty: {
+    load() {
+
+    }
+  },
+  docking_station: {
+    count: 1,
+    load() {
+      spawnDockingStation()
+    }
+  },
+}
+
+let roomContSpecial = {
+  game_intro: {
+    max_per_sector: 1,
+    load () {
+
+    }
+  }
+}
+
 function randomPropertyFrom(obj) {
   var keys = Object.keys(obj);
   return obj[keys[ keys.length * Math.random() << 0]];
@@ -4048,20 +4230,24 @@ function generateRooms() {
 
   rooms.forEach((room,index)=> {
     if(room.type == 'entrance' && sectorIndex == 0) {
-      room.contents.push(roomContGameIntro)
+      room.contents.push(roomContSpecial['game_intro'])
       room.dialog = dialogs['game_intro']
     }
     
-    // console.log(roomCont[roomCont.length - 1])
+    // if(room.type == 'normal') {
+    //   var rand = Math.round(Math.random()*roomCont.length - 0.5)
+    //   if(rand >= roomCont.length) {
+    //     rand = roomCont.length - 1
+    //     console.log('Corrected bad math for room generation. Pls fix.')
+    //   }
+    //   room.contents.push(roomCont[rand])
+    //   room.dialog = randomPropertyFrom(dialogs)
+    // }
     if(room.type == 'normal') {
-
-      var rand = Math.round(Math.random()*roomCont.length)
-      if(rand >= roomCont.length) rand = roomCont.length - 1
-      room.contents.push(roomCont[rand])
-
+      room.contents.push(randomPropertyFrom(roomCont))
       room.dialog = randomPropertyFrom(dialogs)
-    }
-
+  }
+    
   })
 
 }
@@ -4073,7 +4259,7 @@ function initSectorVars() {
 }
 
 function clearMap() {
-  sectorMap.innerHTML = '' //issue // this is bad code, this will break if i add anything to the sector map
+  sectorMapGUI.innerHTML = '' //issue // this is bad code, this will break if i add anything to the sector map
 }
 
 //main generateSector
@@ -4092,25 +4278,51 @@ function generateSector() {
   updateMapVisual(currRoom)
 }
 
-function travel(x,y,dir) {
+function travel(dir) {
   if(player.stuck) {
     console.log('Player stuck!! Player stuck!!!!!! Unable to travel.')
     return
   }
-  console.log('|--traveled--|')
-
+  
   // clear room
   clearRoom()
-  var destination = rooms.find(
-    room => 
-    room.x == currRoom.x + x && 
-    room.y == currRoom.y + y
-  )
+
+  var destination
+  if(dir == 'left') {
+    destination = rooms.find(
+      room => 
+      room.x == currRoom.x - 1 && 
+      room.y == currRoom.y
+    )
+  }
+  if(dir == 'right') {
+    destination = rooms.find(
+      room => 
+      room.x == currRoom.x + 1 && 
+      room.y == currRoom.y
+    )
+  }
+  if(dir == 'up') {
+    destination = rooms.find(
+      room => 
+      room.x == currRoom.x && 
+      room.y == currRoom.y - 1
+    )
+  }
+  if(dir == 'down') {
+    destination = rooms.find(
+      room => 
+      room.x == currRoom.x && 
+      room.y == currRoom.y + 1
+    )
+  }
+
+
   if(!destination) {
     console.log('There is no room over there.')
     return
   }
-  player.stuck = false //issue player.stuck can stay true after leaving a room //idea should prevent the player from leaving if he is stuck inside something
+  player.stuck = false
   spawnPlayer(dir)
   currRoom = destination
   console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
@@ -4119,6 +4331,7 @@ function travel(x,y,dir) {
   updateArrows()
   updateMapVisual(currRoom)
   loadRoom(currRoom)
+  console.log('|--traveled--|')
 }
 
 function spawnPlayer(dir) {
@@ -4139,14 +4352,15 @@ function spawnPlayer(dir) {
     player.y = 0 + player.radius*4
   }
 }
+
 function jump() {
   // this could be the new feature, of jumping several rooms but consuming 1 unit of U235
 }
-function teleport() { //debug // this is msotly a debug feature, it probably won't make it into the game, i like the linear travel, this feels cheaty
+
+function teleport() { //debug // this is mostly a debug feature, it probably won't make it into the game, i like the linear travel, this feels cheaty
   console.log('--teleported--')
   clearRoom()
 
-  spawnPlayer(currRoom)
   currRoom = rooms.find(room => room.x == this.dataset.x && room.y == this.dataset.y)
   console.log('Traveled to room: ' + currRoom.x + ' ' + currRoom.y)
   console.log(currRoom)
@@ -4202,27 +4416,33 @@ let dialogs = {
 function loadRoom(room) {
   // this function loads all content that should be inside a room when you travel there
   console.log('Loaded room at x: ' + room.x + ' y: ' + room.y)
-  room.contents.forEach(object => {
-    if(room.cleared) return
+  // room.contents.forEach(object => {
+  //   if(room.cleared) return
 
-    if(object.key == 'asteroids') {
-      distributeAsteroids(object.count)
-    }
-    if(object.key == 'debris') {
-      distributeDebris(object.count)
-    }
-    if(object.key == 'debris-field') {
-      distributeDebris(object.count)
-    }
-    if(object.key == 'enemy-ship') {
-      spawnEnemyShip(object.count)
-    }
-    if(object.key == 'empty') {
+  //   if(object.key == 'asteroids') {
+  //     distributeAsteroids(object.count)
+  //   }
+  //   if(object.key == 'debris') {
+  //     distributeDebris(object.count)
+  //   }
+  //   if(object.key == 'debris-field') {
+  //     distributeDebris(object.count)
+  //   }
+  //   if(object.key == 'enemy-ship') {
+  //     spawnEnemyShip(object.count)
+  //   }
+  //   if(object.key == 'docking_station') {
+  //     spawnDockingStation()
+  //   }
+  //   if(object.key == 'empty') {
       
-    }
-    if(object.key == 'game_intro') {
+  //   }
+  //   if(object.key == 'game_intro') {
       
-    }
+  //   }
+  // })
+  room.contents.forEach((content)=> {
+    content.load()
   })
   
   if(room.dialog != null) {
@@ -4230,7 +4450,7 @@ function loadRoom(room) {
   }
 }
 function clearRoom() {
-  // ghosts = []
+  // ghosts = [] //issue bug, this causes some weird visual quirks
   projectiles = []
   particles = []
   enemies = []
@@ -4240,6 +4460,7 @@ function clearRoom() {
   asteroids = []
   debriss = []
   deadShipDialogs = []
+  dockingStations = []
   dialogOverlay.innerHTML = ''
 }
 function updateMapVisual(currRoom) {

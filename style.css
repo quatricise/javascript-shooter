@@ -56,7 +56,7 @@ body {
   align-content: center;
 }
 
-.score {
+.text-10--white {
   color: white;
   margin-right: 10px;
 }
@@ -67,6 +67,18 @@ body {
   top: 0;
   right: 0;
   z-index: 10;
+}
+
+.menu-container {
+  position: fixed;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  justify-items: center;
+  align-content: center;
+  align-items: center;
+  z-index: 2;
 }
 
 .ammo, .inv-icon, .map-icon, .ship-icon {
@@ -80,7 +92,8 @@ body {
   cursor: pointer;
 }
 #map-container {
-  z-index: 5;
+  width: 100%;
+  height: 100%;
 }
 .map-icon {
   background-image: url(assets/map.png);
@@ -191,7 +204,7 @@ body {
 }
 
 .dummy {
-  color: hsl(221, 100%, 61%);
+  color: hsl(221, 40%, 36%);
   color: hsl(246, 71%, 50%);
   color: hsl(342, 74%, 52%);
 }
@@ -202,6 +215,7 @@ body {
   height: 100vh;
   user-select: none;
   pointer-events: none;
+  z-index: 2;
 }
 .overlay-dialog {
   position: fixed;
@@ -228,7 +242,9 @@ body {
   justify-items: center;
   align-content: center;
   align-items: center;
-  z-index: 1;
+}
+#dialog-container {
+  z-index: 3;
 }
 .dialog.lore {
   max-width: 75vmax;
@@ -251,7 +267,11 @@ body {
   background-color: rgb(8, 8, 8);
   border-radius: 20px;  
   border: 1px solid rgba(255, 255, 255, 0.123);
-  box-shadow: 0px 0px 100px 10px rgba(255, 255, 255, 0.1);
+  box-shadow: 0px 0px 100px 10px rgba(255, 255, 255, 0.04);
+}
+
+.gui-large h2 {
+  color: white;
 }
 
 .sector-map {
@@ -263,22 +283,9 @@ body {
   grid-template-rows: repeat(8, 1fr);
   gap: 5px;
   padding: 15px;
-  border-radius: 20px;  
-  border-style: solid;
-  border-width: 1px;
-  border-color: rgba(255, 255, 255, 0.123);
-  box-shadow: 0px 0px 100px 10px rgba(255, 255, 255, 0.1);
 }
 
 .inv-cont {
-  position: fixed;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  justify-items: center;
-  align-content: center;
-  align-items: center;
   z-index: 4;
 }
 
@@ -286,6 +293,7 @@ body {
   display: flex;
   width: 75vmin;
   height: 75vmin;
+  z-index: 4;
 }
 
 .inventory .heading {
@@ -339,16 +347,16 @@ body {
   align-items: center;
   height: 20vmin;
   width: 20vmin;
-  background-color: rgb(29, 34, 41);
+  background-color: rgb(34, 34, 34);
   
   border-radius: 10px;
-  box-shadow: 0px 0px 4px 0px rgba(255, 255, 255, 0.2);
+  box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.1);
   /* border: 2px solid rgba(255, 255, 255, 0.233); */
   transition: box-shadow 0.3s;
   cursor: pointer;
 }
 .ship-item:hover {
-  box-shadow: 0px 0px 10px 5px rgba(255, 255, 255, 0.4);
+  box-shadow: 0px 0px 10px 3px rgba(255, 255, 255, 0.25);
 }
 
 .ship-item img {
@@ -357,15 +365,52 @@ body {
 }
 .room {
   background-color: rgb(29, 29, 29);
-  cursor: pointer;
+  position: relative;
 }
 .room:hover {
-  background-color: rgb(53, 53, 53);
+  background-color: rgb(46, 46, 46);
+}
+.room.empty {
+  
+}
+.room.filled {
+  border: 3px solid white;
+  color: white;
+  cursor: pointer;
+}
+.room-tooltip {
+  position: absolute;
+  top: 25px;
+  left: 50%;
+  filter: opacity(0);
+  width: max-content;
+  color: rgb(180, 180, 180);
+  transition: filter 0.5s;
+  pointer-events: none;
+  padding: 7px 12px;
+  background-color: var(--dark);
+  border-radius: 50px;
+  box-shadow: 0 0 6px 0 rgba(87, 87, 87, 0.8);
+  z-index: 100;
+}
+.room-tooltip::before {
+  content: "Unmarked area, probably doesn't contain anything...";
+}
+.room.empty:hover .room-tooltip {
+  filter: opacity(1);
 }
 #arrow-container {
   pointer-events: none;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
-
+.arrow.debug {
+  cursor: pointer;
+}
+.arrow.debug:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
 .arrow {
   position: absolute;
   display: flex;
@@ -380,12 +425,8 @@ body {
   color: rgba(255, 255, 255, 0.4);
   /* debug ↓↓ */
   pointer-events: initial; 
-  cursor: pointer;
   margin: 10px;
   border-radius: 2px;
-}
-.arrow:hover {
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .arrow.close {
@@ -500,6 +541,7 @@ body {
   color: white;
 }
 
+/* all keyframes here */
 @keyframes pulsate {
   from {
     filter: opacity(1);
@@ -508,3 +550,15 @@ body {
     filter: opacity(0.6);
   }
 }
+
+
+.store-interface {
+  width: 75vmax;
+  height: 40vmin;
+}
+
+.ship-overview {
+  width: 75vmin;
+  height: 75vmin;
+}
+

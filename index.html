@@ -14,23 +14,29 @@
       <!-- <span>
         Start game
       </span> -->
-      <div id="button-start" class="button"  onclick='start()'>START GAME</div>
+      <div id="button-start" class="button"  onclick='start()'>START (normal)</div>
+      <div id="button-start" class="button"  onclick='start(true)'>START (debug)</div>
     </div>
     <div class="dialog game-over hidden">
       <div class="dialog-text">
-        Your score was: <br><span id="score-dialog"></span>
-        <br>
-        Waves survived: <br><span id="waves-dialog"></span>
+       <span class="hidden"> 
+          Your score was: <br><span id="score-dialog"></span>
+       <br>
+          Waves survived: <br><span id="waves-dialog">
+        </span>
+        Game over.
+      </span>
       </div>
       <!-- <br> -->
       <div id="button-restart" class="button" onclick='start()'>RESTART</div>
+      <div id="button-start" class="button"  onclick='start(true)'>START (debug)</div>
     </div>
   </div>
   <div class="info-box left">
-    <div class="score">
+    <div class="text-10--white hidden">
       <span>SCORE: </span><span id="score-top">0</span>
     </div>
-    <div class="score">
+    <div class="text-10--white">
       <span>ROOM: </span><span id="room-top"></span>
     </div>
     <div class="healthbar-container">
@@ -44,16 +50,16 @@
       </div>
     </div>
   </div>
+  
   <div class="ui top-right">
-
-    <div class="map-icon" onclick="toggleMap()"></div>
+    <div class="map-icon" onclick="openMenu(sectorMapGUI)"></div>
     <div style="width:15px"></div>
 
-    <div class="ship-icon moth" onclick="toggleInventory()"></div>
+    <div class="ship-icon moth" data-menu="" onclick="openMenu(shipOverviewGUI)"></div>
     <div style="width:15px"></div>
 
     <div class="inv-container">
-      <div class="inv-icon" onclick="toggleInventory()"></div>
+      <div class="inv-icon" data-menu="inventory" onclick="openMenu(inventoryGUI)"></div>
     </div>
     <div style="width:15px"></div>
     <div class="ammo regular" onclick="switchAmmo('regular')">
@@ -72,26 +78,28 @@
       <span class="ammo-count machine" id="ammo-machine">0</span>
     </div>
   </div>
-  <div class="fullscreen-container hidden" id="arrow-container" >
-    <div class="arrow left" onclick="travel(-1,0,'left')">⮜</div>
-    <div class="arrow right" onclick="travel(1,0,'right')">⮞</div>
-    <div class="arrow top" onclick="travel(0,-1,'up')">⮝</div>
-    <div class="arrow bottom" onclick="travel(0,1,'down')">⮟</div>
+  
+  <div class="fullscreen-container hidden" id="arrow-container">
+    <div class="arrow left">⮜</div>
+    <div class="arrow right">⮞</div>
+    <div class="arrow top">⮝</div>
+    <div class="arrow bottom">⮟</div>
   </div>
-  <div class="overlay-main"></div>
+  
+
   <div class="fullscreen-container" id="dialog-container"></div>
 
   <!-- map -->
-  <div class="fullscreen-container hidden" id="map-container" >
+  <!-- <div class="fullscreen-container hidden" id="map-container" >
     <div class="sector-map gui-large" id="sector-map"></div>
-  </div>
+  </div> -->
 
   <!-- inventory -->
-  <div class="inv-cont hidden" id="inventory-container">
+  <!-- <div class="inv-cont hidden" id="inventory-container">
     <div class="inventory gui-large">
       <h2 class="heading">INVENTORY</h2>
     </div>
-  </div>
+  </div> -->
 
   <!-- ship select -->
   <div class="ship-select-cont hidden" id="ship-select-container">
@@ -114,6 +122,29 @@
       </div>
     </div>
   </div>
+
+
+  <div class="menu-container hidden" id="menu-container">
+
+    <div class="sector-map gui-large menu hidden" id="sector-map"></div>
+
+    <div class="store-interface gui-large menu hidden" id="store-interface">
+      <h2>Temporary text: Station XOR-0-1512 </h2>
+    </div>
+
+    <div class="inventory gui-large menu hidden" id="inventory">
+      <h2 class="heading">INVENTORY</h2>
+    </div>
+    
+    <div class="ship-overview gui-large menu hidden" id="ship-overview">
+      <h2>Temp text</h2>
+    </div>
+  
+  </div>
+
+  
+  <div class="overlay-main"></div> <!-- possible issue with the placement of this overlay, dunno what it's even used for -->
+
   <!-- this is for various in-game dialog optious -->
   <div class="overlay-dialog"></div>
 
