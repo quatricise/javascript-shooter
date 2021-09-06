@@ -18,9 +18,28 @@ let ch = canvas.height
 
 let centerX = canvas.width/2
 let centerY = canvas.height/2
-let mouseX
-let mouseY
+let mouseX = null
+let mouseY = null
 
+// camera and room size logic
+let camera = {
+  x: 0,
+  y: 0,
+  w: cw,
+  h: ch,
+}
+
+let useCamera = false;
+
+
+let bgrid = {
+  cellsize: 256,
+  gridnum: 16,
+  x: 0,
+  y: 0,
+}
+bgrid.x = -(bgrid.gridnum/2 * bgrid.cellsize)
+bgrid.y = -(bgrid.gridnum/2 * bgrid.cellsize)
 window.onresize = function() {
   canvas.width = canvasBg.width = canvasFx.width = window.innerWidth
   canvas.height = canvasBg.height = canvasFx.height = window.innerHeight
@@ -28,6 +47,8 @@ window.onresize = function() {
   centerY = canvas.height/2;
   cw = canvas.width 
   ch = canvas.height
+  camera.w = cw
+  camera.h = ch
 }
 
 let debug = false;
@@ -194,6 +215,8 @@ let debriss = []
 
 let dockingStations = []
 
+let objects_all = []
+let objects_collidable = []
 // arrays for UI and overlay objects
 let hints = []
 
@@ -212,6 +235,8 @@ let friction = 0.999 // global friction variable, only used for particles, which
 let machineFireRate = 12
 let explosionColor = 'orange'
 let explosionRadius = 220
+
+let debrisTypes = ['basic','2','3']
 
 let items = {
   laser_mount: {
@@ -279,7 +304,6 @@ let ships = {
     },
     agility: 2.5,
     armor: 8,
-    dodgeDistance: dodgeDistance,
     maxDodge: 550,
     maxVel: 12,
     acceleration: 4,
@@ -292,7 +316,7 @@ let ships = {
       
     },
     mounts: 2,
-    weight: 25,
+    mass: 25,
     impactResist: 4,
     shields: {
       energyCost: 5,
@@ -304,8 +328,7 @@ let ships = {
     invSlots: 8,
     autoBreakPower: 0.04,
     hitbox: {
-      type: 'radius',
-      radius: 50,
+
     },
     radius: 25,
   },
@@ -326,7 +349,6 @@ let ships = {
     },
     agility: 3,
     armor: 10,
-    dodgeDistance: dodgeDistance,
     maxDodge: 650,
     maxVel: 15,
     acceleration: 3,
@@ -339,7 +361,7 @@ let ships = {
       front_laser_double: weapons['front_laser_double'] //default starting weapon of WASP-110
     },
     mounts: 2,
-    weight: 35,
+    mass: 35,
     impactResist: 6,
     shields: {
       energyCost: 5,
@@ -351,8 +373,7 @@ let ships = {
     invSlots: 10,
     autoBreakPower: 0.02,
     hitbox: {
-      type: 'radius',
-      radius: 50,
+
     },
     radius: 30,
   },
@@ -369,7 +390,6 @@ let ships = {
     },
     agility: 1.2,
     armor: 12,
-    dodgeDistance: dodgeDistance,
     maxDodge: 350,
     maxVel: 10,
     acceleration: 2,
@@ -380,7 +400,7 @@ let ships = {
     energyMax: 30,
     weapons: {},
     mounts: 2,
-    weight: 70,
+    mass: 70,
     impactResist: 4,
     shields: {
       energyCost: 10,
@@ -392,8 +412,7 @@ let ships = {
     invSlots: 30,
     autoBreakPower: 0.012,
     hitbox: {
-      type: 'radius',
-      radius: 50,
+
     },
     radius: 30,
   },
@@ -409,7 +428,6 @@ let ships = {
     },
     agility: 1.5,
     armor: 15,
-    dodgeDistance: dodgeDistance,
     maxDodge: 700,
     maxVel: 10,
     acceleration: 2,
@@ -422,7 +440,7 @@ let ships = {
       debug: weapons['debug']
     },
     mounts: 4,
-    weight: 120,
+    mass: 120,
     impactResist: 6,
     shields: {
       energyCost: 10,
@@ -433,14 +451,74 @@ let ships = {
     dashTimerMax: 50,
     invSlots: 25,
     autoBreakPower: 0.025,
-    hitbox: {
-      type: 'box',
-      w: 50,
-      h: 100,
-    },
+    hitbox: [
+      {
+        x1: -55,
+        y1: -112,
+        x2: 110,
+        y2: 142,
+      },
+      // {
+      //   x1: -30,
+      //   y1: 30,
+      //   x2: 85,
+      //   y2: 83,
+      // },
+    ],
+    hitboxType: 'hitbox',
     radius: 50, // unimportant, will be swapped for hitboxes later on
   },
 }
+
+let enemy_ships = {
+  wasp: {
+    name: 'WASP-110',
+    visual: {
+      base: 'assets/wasp_default.png',
+      turret: null,
+      dashInd: 'assets/wasp_default_dash_indicator.png',
+      laserInd: {
+        c0: 'assets/wasp_default_laser_ind_0.png',
+        c1: 'assets/wasp_default_laser_ind_1.png',
+        c2: 'assets/wasp_default_laser_ind_2.png',
+        c3: 'assets/wasp_default_laser_ind_3.png',
+      },
+      dimX: 128,
+      dimY: 128,
+    },
+    agility: 3,
+    armor: 10,
+    maxDodge: 650,
+    maxVel: 15,
+    acceleration: 3,
+    backAccel: 1,
+    steerSpeed: 3.5,
+    steerWindupMax: 18,
+    reactorPower: 2,
+    energyMax: 10,
+    weapons: {
+      front_laser_double: weapons['front_laser_double'] //default starting weapon of WASP-110
+    },
+    mounts: 2,
+    mass: 35,
+    impactResist: 6,
+    shields: {
+      energyCost: 5,
+      strenght: 2,
+      radius: 80,
+      active: false,
+    },
+    dashTimerMax: 50,
+    invSlots: 10,
+    autoBreakPower: 0.02,
+    hitbox: {
+      type: 'radius',
+      radius: 50,
+    },
+    radius: 30,
+  },
+}
+
 let stations = {
   docking_station : {
     name: 'XOR-0-1512',
@@ -461,7 +539,6 @@ class Ship {
     this.acceleration = shipData.acceleration
     this.backAccel = shipData.backAccel
     this.maxVel = shipData.maxVel
-    this.dodgeDistance = shipData.dodgeDistance
     this.maxDodge = shipData.maxDodge
     this.steerSpeed = shipData.steerSpeed // 360 % this.steerSpeed == 0 , otherwise not good
     this.reactorPower = shipData.reactorPower
@@ -471,7 +548,7 @@ class Ship {
     this.agility = shipData.agility //idea ,this influences the change in velocity when dashing
     this.shields = shipData.shields
     this.impactResist = shipData.impactResist
-    this.weight = shipData.weight
+    this.mass = shipData.mass
     this.armor = shipData.armor
     this.invSlots = shipData.invSlots
     this.autoBreakPower = shipData.autoBreakPower
@@ -508,9 +585,11 @@ class Ship {
     }
     this.dimX = this.visual.dimX
     this.dimY = this.visual.dimY
-
+    this.hitboxInit = shipData.hitbox
+    this.hitbox = this.hitboxInit
+    
     // universal properties initialized for each ship
-    this.id = Math.round(Math.random()*100000000000) //minorissue this has a very low chance to break, so it's probably okay
+    this.id = Math.round(Math.random()*100000000000000) //minorissue this has a very low chance to break, so it's probably okay
     this.glowSprite = new Image()
     this.glowSprite.src = 'assets/ship_glow.png'
     this.x = x
@@ -522,16 +601,19 @@ class Ship {
       x: 0,
       y: 0,
     }
-
     this.hidden = false // cloaking idea, perhaps that will be reworked into a % based cloak
     this.invulnerable = false
+    this.dodgeDistance =  this.maxDodge
     this.dodging = false
     this.dashTimer = 0 //idea it should go up to around 30 or 40 so you can dash once a second just fine
     this.stuck = false
     this.stuckInside = null
     this.stuckTimer = 3
     this.inDanger = false
-
+    this.grid_pos = {
+      x: null,
+      y: null,
+    }
     this.dashRamp = 3 //unfinished
     this.activeWeaponKey = Object.keys(this.weapons)[0]
 
@@ -539,38 +621,44 @@ class Ship {
     // this.maxVel = 5
     this.currency = 0
     this.inventory = []
+
+    this.transform = null;
+
+    this.broadphase_detected = false
+
+    objects_all.push(this)
+    objects_collidable.push(this)
   }
-  draw() {
+  draw() { //player.draw()
+
+    // main transformation matrix for player
+    this.applyMatrix()
 
     if(this.dodging) {
-      ctx.globalAlpha = 0.4;
-      ctx.filter = 'saturate(0)'
+      ctx.globalAlpha = 0.5;
+      ctx.filter = 'saturate(0) brightness(0.9)'
     }
     else if(this.invulnerable) {
       ctx.globalAlpha = 1
-      ctx.filter = 'saturate(0) brightness(0.8)'
+      ctx.filter = 'saturate(0) brightness(0.9)'
     }
+
     // just test drawing some kinda shields
     if(this.shields.active) {
       ctx.save()
       ctx.beginPath()
-      ctx.arc(this.x,this.y,this.shields.radius,0,pi*2,false)
+      ctx.arc(0,0,this.shields.radius,0,pi*2,false)
       ctx.strokeStyle = 'hsla(214, 80%, 68%, 0.4)'
       ctx.lineWidth = 3
       ctx.stroke()
+      ctx.closePath()
       ctx.restore()
     }
 
-    //idea blue glow behind ship
-    ctxBg.drawImage(this.glowSprite,this.x - this.dimX,this.y - this.dimY,this.dimX*2,this.dimY*2)
-    //draw ship body and dash indicator
-    ctx.save()
+    //draw ship glow
+    ctxBg.drawImage(this.glowSprite,0 - this.dimX,0 - this.dimY,this.dimX*2,this.dimY*2)
 
-    ctx.translate(this.x,this.y)
-    ctx.rotate(this.rotation * pi / 180)
-
-
-   
+    //draw ship body
     ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
 
     //dash ind
@@ -579,60 +667,63 @@ class Ship {
       ctx.drawImage(this.dashInd, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
     }
     ctx.globalAlpha = 1
-    ctx.restore()
+
 
     //draw turret if ship has one
     if(this.turret) {
       this.rotateTurret()
-      ctx.save()
-      ctx.translate(this.x,this.y)
-      ctx.rotate(this.turretRotation * pi / 180)
-      // if(this.invulnerable) {
-      //   ctx.globalAlpha = 0.4;
-      //   ctx.filter = 'saturate(0)'
-      // }
       ctx.drawImage(this.turret, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
-      ctx.restore()
     }
 
     //draw laserInd if ship has one
     if(this.laserInd != null) {
-      ctx.save()
-      ctx.translate(this.x,this.y)
-      ctx.rotate(this.rotation * pi / 180)
-      // if(this.invulnerable) {
-      //   ctx.globalAlpha = 0.4;
-      //   ctx.filter = 'saturate(0)'
-      // }
-
       ctx.drawImage(this.laserInd.current, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
-      ctx.restore()
     }
 
-    //debug 
-    if(debug) {
+    if(debug) { //debug text
+      //draw x, y, rotation, gridPos
       ctx.save()
-      ctx.translate(this.x,this.y)
+      ctx.rotate(-this.rotation * pi/180)
       ctx.font = '14px Arial'
       ctx.fillStyle = 'white'
+      ctx.fillText('Grid cell: ' + this.grid_pos.x, 0 - this.dimX/2, 0 - this.dimY/2 - 80);
+      ctx.fillText('Grid cell: ' + this.grid_pos.y, 0 - this.dimX/2, 0 - this.dimY/2 - 60);
+      ctx.fillText('x:' + this.x, 0 - this.dimX/2, 0 - this.dimY/2 - 40);
+      ctx.fillText('y:' + this.y, 0 - this.dimX/2, 0 - this.dimY/2 - 20);
       ctx.fillText(this.rotation, 0 - this.dimX/2, 0 - this.dimY/2);
       ctx.restore()
+    }
+    
+    if(debug) { //debug 
+      // draw hitbox representation ( this does not mean the hitbox is accurate, this drawing represents the DESIRED hitbox, i'll draw the ACTUAL hitbox from somewhere else)
+      if(this.hitbox) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.lineWidth = 2
+        ctx.globalAlpha = 0.5
+        ctx.strokeStyle = 'white'
+        this.hitbox.forEach(box=> {
+          ctx.rect(0 + box.x1,0 + box.y1,box.x2,box.y2)
+        })
+        
+        
+        ctx.stroke()
+        ctx.closePath()
+        ctx.restore()
+      }
 
-      // draw hitbox
+      //deprecated but col detection still used ship.radius
       ctx.save()
       ctx.beginPath()
-      ctx.lineWidth = 2
-      ctx.globalAlpha = 0.5
-      ctx.strokeStyle = 'white'
-      ctx.arc(this.x,this.y,this.radius,0,pi*2,false)
+      ctx.lineWidth = 1
+      ctx.strokeStyle = 'hsla(45,100%,70%,0.25)'
+      ctx.arc(0,0,this.radius,0,pi*2,false)
       ctx.stroke()
       ctx.closePath()
       ctx.restore()
 
       // draw boundingbox
       ctx.save()
-      ctx.translate(this.x,this.y)
-      ctx.rotate(this.rotation * pi / 180)
       ctx.beginPath()
       ctx.lineWidth = 2
       ctx.globalAlpha = 0.25
@@ -643,37 +734,48 @@ class Ship {
       ctx.restore()
     }
 
-    
     ctx.globalAlpha = 1
     ctx.filter = 'none'
     
+    this.restoreMatrix()
   }
+
   toggleShields() {
-    // if(this.shields.active) {
-    //   this.shields.active = false
-    // }
-    // else this.shields.active = true
     this.shields.active = !this.shields.active
   }
+
   rotateTurret() {
     var angle = Math.atan2(player.y - mouseY, player.x - mouseX);
     this.turretRotation = 270 + (angle * 180) / pi
   }
-  drawGhosts() {
-    ghosts.forEach((ghost, index) => {
-      if(ghost.alpha <= 0) {
-       setTimeout(()=>{
-        ghosts.splice(index,1)
-       },0)
-       return
-      }
-      ghost.draw()
-      ghost.alpha -= ghostOpacity / ghostNumber
-    })
+
+  saveGhost_Shadow() {
+    if(this.velocity.x + this.velocity.y > 0) {
+      ghosts.push(new Ghost(this.x, this.y, this.rotation, this.visual, this.sprite, 'shadow'))
+    }
   }
 
-  saveGhost() {
-    ghosts.push(new Ghost(this.x,this.y,this.rotation,this.visual,this.sprite, 'shadow'))
+  displayDodgePreview() {
+    if(!pressedShift) return
+    if(this.dodging) return
+    let distFromPlayer = Math.hypot(
+      this.x - mouseX - camera.x, 
+      this.y - mouseY - camera.y
+    )
+    let distX = mouseX - this.x + camera.x
+    let distY = mouseY - this.y + camera.y
+    let distanceRatio = distFromPlayer / this.dodgeDistance
+    if(distanceRatio > 1) {
+      distX /= distanceRatio
+      distY /= distanceRatio
+    }
+    ctx.save()
+    // ctx.globalAlpha = 0.4
+    ctx.filter = 'saturate(0) brightness(0.5)'
+    ctx.translate(this.x + distX,this.y + distY)
+    ctx.rotate(this.rotation * pi / 180)
+    ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2 , this.dimX, this.dimY)
+    ctx.restore()
   }
   accelerate() {
     if(!movingForward && !movingBackward) return;
@@ -719,7 +821,7 @@ class Ship {
         this.velocity.y += -Math.abs(Math.sin(rad) * this.acceleration/15 )
       }
     }
-
+    else
     if(movingBackward) {
 
       if(this.rotation >= 0 && this.rotation < 90) {
@@ -807,49 +909,6 @@ class Ship {
     setTimeout(()=>{this.invulnerable = false},500)
   }
 
-
-  // dodge(direction) {
-  //   // console.log(this.dodgeDistance)
-  //   if(dodgeDir !== null) return;
-  //     playerMoved = true
-  //     this.invulnerable = true
-  //     this.dodging = true
-      
-  //     if(direction == 'left') {
-  //       gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'right') {
-  //       gsap.fromTo(this,{x: this.x}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'up') {
-  //       gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y -= this.dodgeDistance})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'down') {
-  //       gsap.fromTo(this,{y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},y: this.y += this.dodgeDistance})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'upLeft') {
-  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance / 1.414, y: this.y -= this.dodgeDistance / 1.414})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'downLeft') {
-  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x -= this.dodgeDistance / 1.414, y: this.y += this.dodgeDistance / 1.414})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'upRight') {
-  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance / 1.414, y: this.y -= this.dodgeDistance / 1.414})
-  //       dodgeDir = direction;
-  //     }
-  //     if(direction == 'downRight') {
-  //       gsap.fromTo(this,{x: this.x ,y: this.y}, {duration: dodgeSpeed + (dodgeDistance/1200), onComplete: () => {dodgeFinish()},x: this.x += this.dodgeDistance / 1.414, y: this.y += this.dodgeDistance / 1.414})
-  //       dodgeDir = direction;
-  //     }
-  //     this.velocity.x = this.velocity.y = 0
-  // }
-
   displayDodgeRange() {
     dodgePosVisible = true;
     if(windup < 48) windup += 8
@@ -875,18 +934,16 @@ class Ship {
       this.invulnerable = true
       this.dodging = true
       
-      let distFromPlayer = Math.hypot(this.x - ev.clientX, this.y - ev.clientY)
-      let distX = ev.clientX - this.x
-      let distY = ev.clientY - this.y
+      let distFromPlayer = Math.hypot(this.x - ev.clientX - camera.x, this.y - ev.clientY - camera.y)
+      let distX =  ev.clientX - this.x + camera.x
+      let distY =  ev.clientY - this.y + camera.y
 
-      console.log('Dist x: ' + distX)
       let distanceRatio = distFromPlayer / this.dodgeDistance
 
       if(distanceRatio > 1) {
         distX /= distanceRatio
         distY /= distanceRatio
-      } 
-      // simplify this for now, just move to where the player clicks
+      }
       gsap.fromTo(this,
         {
           x: this.x, 
@@ -895,7 +952,7 @@ class Ship {
         {
           x: this.x + distX,
           y: this.y + distY,
-          duration: dodgeSpeed + (dodgeDistance/1200), 
+          duration: dodgeSpeed + (distFromPlayer/1200), 
           onComplete: () => {dodgeFinish()},
         })
 
@@ -907,33 +964,50 @@ class Ship {
   dash() {
     if(this.dashTimer) return;
     if(dodgeDir) return;
+    if(movingBackward && !movingForward) {
+      this.velocity.x *= -1
+      this.velocity.y *= -1
+    }
     var rad;
+    //do a backwards dash
     this.velocity.x /= this.agility
     this.velocity.y /= this.agility
+    let pushX;
+    let pushY;
     if(this.rotation >= 0 && this.rotation < 90) {
       rad = (90 - this.rotation) * (pi/180);
-      this.velocity.x += Math.abs(Math.cos(rad) * this.acceleration*5 )
-      this.velocity.y += -Math.abs(Math.sin(rad) * this.acceleration*5 )
+      pushX = Math.abs(Math.cos(rad) * this.acceleration*5 )
+      pushY = -Math.abs(Math.sin(rad) * this.acceleration*5 )
     }
     if(this.rotation >= 90 && this.rotation < 180) {
       rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-      this.velocity.x += Math.abs(Math.cos(rad) * this.acceleration*5 )
-      this.velocity.y += Math.abs(Math.sin(rad) * this.acceleration*5 )
+      pushX = Math.abs(Math.cos(rad) * this.acceleration*5 )
+      pushY = Math.abs(Math.sin(rad) * this.acceleration*5 )
     }
 
     if(this.rotation >= 180 && this.rotation < 270) {
       rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-      this.velocity.x += -Math.abs(Math.cos(rad) * this.acceleration*5 )
-      this.velocity.y += Math.abs(Math.sin(rad) * this.acceleration*5 )
+      pushX = -Math.abs(Math.cos(rad) * this.acceleration*5 )
+      pushY = Math.abs(Math.sin(rad) * this.acceleration*5 )
     }
 
     if(this.rotation >= 270 && this.rotation < 360) {
       rad = (90 - (90 - (90 - this.rotation))) * (pi/180);
-      this.velocity.x += -Math.abs(Math.cos(rad) * this.acceleration*5 )
-      this.velocity.y += -Math.abs(Math.sin(rad) * this.acceleration*5 )
+      pushX = -Math.abs(Math.cos(rad) * this.acceleration*5 )
+      pushY = -Math.abs(Math.sin(rad) * this.acceleration*5 )
     }
-    this.velocity.x += this.agility
-    this.velocity.y += this.agility
+    
+    if(movingForward &&!movingBackward || !movingForward && !movingBackward) {
+      this.velocity.x += pushX
+      this.velocity.y += pushY
+    }
+    else if(movingBackward && !movingForward) {
+      this.velocity.x -= pushX
+      this.velocity.y -= pushY
+    }
+    
+    this.velocity.x *= 1 + this.agility/10
+    this.velocity.y *= 1 + this.agility/10
     if(debug) console.log("Velocity after dashing: x: " + this.velocity.x + ' y: ' + this.velocity.y)
     this.dashTimer = this.dashTimerMax //issue terrible naming
   }
@@ -985,14 +1059,44 @@ class Ship {
       if(weapon.charges == 3) this.laserInd.current = this.laserInd.c3
     }
   }
+  spawn() {
+    //write spawn code that places the player inside a room appropriately
+  }
+  applyMatrix() {
+    ctx.save()
+    ctxBg.save()
+    this.transform = new Transform()
+    this.transform.translate(-camera.x,-camera.y)
+    this.transform.translate(this.x,this.y)
+    // this.transform.rotate(this.rotation * pi / 180)
+
+    var m = this.transform.m;
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctxBg.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+  }
+  restoreMatrix() {
+    ctx.restore()
+    ctxBg.restore()
+  }
+  transformHitbox() {
+     // now transform the hitbox
+  }
+  restoreHitbox() {
+    this.hitbox = this.hitboxInit
+  }
+
   update() {
+    this.applyMatrix()
+
     this.steer()
     this.accelerate()
     this.move()
     this.decelerate()
-    this.saveGhost()
+    this.saveGhost_Shadow()
     this.dashRecharge()
     this.updateWeapons()
+
+    this.restoreMatrix()
   }
 }
 
@@ -1007,10 +1111,16 @@ class Ghost {
     this.type = type
     this.dimX = this.visual.dimX
     this.dimY = this.visual.dimY
+
+    objects_all.push(this)
+
   }
   draw() {
+    if(this.alpha < 0) {
+      console.log('Ghost drawn with alpha < 0, a mistake happened.')
+      return
+    }
     if(this.type == 'shadow') {
-
       ctx.save()
       ctx.translate(this.x,this.y)
       ctx.rotate(this.rotation * pi / 180)
@@ -1018,6 +1128,13 @@ class Ghost {
       ctx.globalAlpha = this.alpha;
       ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2, this.dimX, this.dimY)
       ctx.restore()
+    }
+  }
+  update() {
+    if(this.alpha <= 0) {
+      return
+    } else {
+      this.alpha -= ghostOpacity / ghostNumber
     }
   }
 }
@@ -1124,7 +1241,7 @@ class LaserBeam {
 
 class DockingStation {
   constructor(x,y,rotation,stationData) {
-    this.id = Math.round(Math.random()*100000000000)
+    this.id = Math.round(Math.random()*100000000000000)
     this.name = stationData.name
     this.dimX = stationData.visual.dimX
     this.dimY = stationData.visual.dimY
@@ -1135,6 +1252,8 @@ class DockingStation {
     this.y = y
     this.rotation = rotation
     this.hintVisible = false;
+
+    objects_all.push(this)
   }
   draw() {
     ctx.save()
@@ -1247,6 +1366,7 @@ class Projectile {
       this.type = type;
       this.dead = false;
     }
+    objects_all.push(this)
   }
   draw() {
     
@@ -1281,6 +1401,7 @@ class Projectile {
   }
 }
 
+
 class ProjectileGhost {
   constructor(x,y,radius,color) {
     this.x = x
@@ -1311,8 +1432,9 @@ class ProjectileGhost {
   }
 } 
 class EnemyShip {
-  constructor(x,y,radius,rotation) {
-    this.id = Math.round(Math.random()*100000000000)
+  constructor(x,y,radius,rotation,shipData) {
+    this.id = Math.round(Math.random()*100000000000000)
+    this.name = shipData.name
     this.x = x
     this.y = y
     this.radius = radius
@@ -1335,18 +1457,16 @@ class EnemyShip {
     this.hasLineOfSight = false
     this.changingTarget = false
     this.sprite = new Image()
-    this.sprite.src = 'assets/cargo_ship_small.png'
-    this.spriteDim = {
-      x: 128,
-      y: 128,
-    }
+    this.sprite.src = 'assets/wasp_default.png'
     this.dimX = 128 
     this.dimY = 128
-    this.weight = 35
+    this.mass = 35
     this.fireTimerInit = 90
     this.fireTimer = this.fireTimerInit
     this.markForHit = false;
 
+    objects_all.push(this)
+    objects_collidable.push(this)
   }
   draw() {
     ctx.save()
@@ -1359,7 +1479,7 @@ class EnemyShip {
     else if (this.dead) {
       ctx.filter = 'brightness(0.8)'
     }
-    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
+    ctx.drawImage(this.sprite, 0 - this.dimX/2, 0 - this.dimY/2,this.dimX,this.dimX)
 
     ctx.closePath()
     ctx.restore()
@@ -1536,11 +1656,6 @@ class EnemyProjectile {
     ctx.fill();
     ctx.closePath();
   }
-  // drawGhosts() { //unfinished - ghosts of enemy projectiles will be dealt with later
-  //   projectileGhosts.forEach((ghost)=> {
-  //     ghost.update()
-  //   })
-  // }
   update() {
     this.x += this.velocity.x
     this.y += this.velocity.y
@@ -1728,9 +1843,141 @@ class Base {
   }
 }
 
+
+class Asteroid {
+  constructor(x,y,rotation,velocity,type) {
+    this.id = Math.round(Math.random()*100000000000000)
+    this.x = x
+    this.y = y
+    this.rotation = rotation
+    this.velocity = velocity
+    this.type = type // meaningless property so far
+    this.sprite = new Image()
+    this.sprite.src = 'assets/asteroid_1.png'
+    this.dimX = 128
+    this.dimY = 128
+    this.spriteDim = {
+      x: 128,
+      y: 128
+    }
+    this.mass = 500
+    this.radius = Math.max(this.dimX,this.dimY)/2
+    this.velAbsorb = 0.15
+    // this.canCollide = true;
+    this.stuck = false;
+    this.stuckTimer = 3
+    this.stuckInside = null; // after it hits an asteroid it has the id of the previous asteroid written here, it is deleted after it is unstuck
+    this.grid_pos = {
+      x: undefined,
+      y: undefined,
+    }
+    this.hitbox =  [
+      {
+        x1: -55,
+        y1: -112,
+        x2: 110,
+        y2: 142,
+      },
+      // {
+      //   x1: -30,
+      //   y1: 30,
+      //   x2: 85,
+      //   y2: 83,
+      // },
+    ]
+    this.hitboxType = 'hitbox'
+
+
+    objects_all.push(this)
+    objects_collidable.push(this)
+
+  }
+  draw() {
+    this.applyMatrix()
+
+    //draw asteroid sprite
+    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
+   
+    
+    if(debug) {
+      // draw id
+      ctx.save() 
+      ctx.font = '14px Arial'
+      ctx.fillStyle = 'white'
+      ctx.fillText(`id: ${this.id}`, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2);
+      ctx.restore()
+
+      //draw radial hitbox
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(0,0,this.spriteDim.x/2,0,pi*2,false)
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.closePath()
+      ctx.restore()
+
+      //draw actual radial hitbox
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(0,0,this.spriteDim.x/3,0,pi*2,false)
+      ctx.strokeStyle = 'lightblue'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.closePath()
+      ctx.restore()
+
+      
+      // draw hitbox representation ( this does not mean the hitbox is accurate, this drawing represents the DESIRED hitbox, i'll draw the ACTUAL hitbox from somewhere else)
+      if(this.hitbox) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.lineWidth = 2
+        ctx.globalAlpha = 0.5
+        ctx.strokeStyle = 'white'
+        this.hitbox.forEach(box=> {
+          ctx.rect(0 + box.x1,0 + box.y1,box.x2,box.y2)
+        })
+        
+        
+        ctx.stroke()
+        ctx.closePath()
+        ctx.restore()
+      }
+    }
+    this.restoreMatrix()
+  }
+  applyMatrix() {
+    ctx.save()
+    ctxBg.save()
+    this.transform = new Transform()
+    this.transform.translate(-camera.x,-camera.y)
+    this.transform.translate(this.x,this.y)
+    // this.transform.rotate(this.rotation * pi / 180)
+
+    var m = this.transform.m;
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctxBg.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+
+  }
+  restoreMatrix() {
+    ctx.restore()
+    ctxBg.restore()
+  }
+
+  update() {
+    this.applyMatrix()
+
+    this.x += this.velocity.x
+    this.y += this.velocity.y
+
+    this.restoreMatrix()
+  }
+}
+
 class Debris {
   constructor(x,y,rotation,velocity,type) {
-    this.id = Math.round(Math.random()*100000000000) //minorissue this has a very low chance to break, so it's probably okay
+    this.id = Math.round(Math.random()*100000000000000) //minorissue this has a very low chance to break, so it's probably okay
     this.x = x
     this.y = y
     this.rotation = rotation
@@ -1746,7 +1993,10 @@ class Debris {
     }
     this.stuck = false
     this.stuckInside = null
+    this.radius = this.spriteDim/2
     this.velAbsorb = 0.01
+    objects_all.push(this)
+    objects_collidable.push(this)
   }
   draw() {
     ctx.save()
@@ -1792,71 +2042,6 @@ class Debris {
   }
 }
 
-class Asteroid {
-  constructor(x,y,rotation,velocity,type) {
-    this.id = Math.round(Math.random()*100000000000) //minorissue this has a very low chance to break, so it's probably okay
-    this.x = x
-    this.y = y
-    this.rotation = rotation
-    this.velocity = velocity
-    this.type = type // meaningless property so far
-    this.sprite = new Image()
-    this.sprite.src = 'assets/asteroid_1.png'
-    this.spriteDim = {
-      x: 128,
-      y: 128
-    }
-    this.weight = 500
-    this.velAbsorb = 0.15
-    // this.canCollide = true;
-    this.stuck = false;
-    this.stuckTimer = 3
-    this.stuckInside = null; // after it hits an asteroid it has the id of the previous asteroid written here, it is deleted after it is unstuck
-  }
-  draw() {
-    ctx.save()
-    ctx.translate(this.x,this.y)
-    ctx.rotate(this.rotation * pi/180)
-    ctx.drawImage(this.sprite, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2,this.spriteDim.x,this.spriteDim.y)
-    ctx.restore()
-    
-    if(debug) {
-      // draw id
-      ctx.save() 
-      ctx.translate(this.x,this.y)
-      ctx.font = '14px Arial'
-      ctx.fillStyle = 'white'
-      ctx.fillText(`${this.id}`, 0 - this.spriteDim.x/2, 0 - this.spriteDim.y/2);
-      ctx.restore()
-
-      //draw hitbox
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(this.x,this.y,this.spriteDim.x/2,0,pi*2,false)
-      ctx.strokeStyle = 'white'
-      ctx.lineWidth = 1
-      ctx.stroke()
-      ctx.closePath()
-      ctx.restore()
-
-      //draw actual hitbox
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(this.x,this.y,this.spriteDim.x/3,0,pi*2,false)
-      ctx.strokeStyle = 'lightblue'
-      ctx.lineWidth = 1
-      ctx.stroke()
-      ctx.closePath()
-      ctx.restore()
-    }
-    
-    
-  }
-  update() {
-    this.x += this.velocity.x
-    this.y += this.velocity.y
-  }
-}
 
 class DeadShipDialog {
   constructor(x,y,text,source) {
@@ -1893,6 +2078,7 @@ class DeadShipDialog {
       this.trigger.style.left = (Math.round(this.x) - this.triggerOffset) + 'px'
       this.trigger.style.top = (Math.round(this.y) - this.triggerOffset) + 'px'
     }
+
     if(Math.hypot(player.x - this.x, player.y - this.y) < player.dimX + 20) {
       this.trigger.style.pointerEvents = 'all'
       this.indicator.style.borderColor = 'white'
@@ -1922,7 +2108,7 @@ class InfoPopup {
   }
   update() {
     this.life--
-    if(this.life <= 50) this.visual.style.filter = `opacity(${this.life/50})`
+    if(this.life <= 25) this.visual.style.filter = `opacity(${this.life/25})`
     if(this.life <= 0) {
       this.visual.remove()
       this.dead = true;
@@ -1991,7 +2177,7 @@ function spawnEnemy() { //deprecated
 
 function spawnEnemyShip(x = centerX,y = centerY) {
   console.log('Spawned enemy ship.')
-  enemyships.push(new EnemyShip(x,y,50,0))
+  enemyships.push(new EnemyShip(x,y,50,0,enemy_ships['wasp']))
 }
 
 function spawnDockingStation(x,y) {
@@ -2027,9 +2213,6 @@ function init() { //this is a hard reset, this resets (almost) everything to the
 
   calcAmmoTotal()
 
-  //issue there needs to be a definitive way of storing the chosen ship
-  // player = new Ship(centerX, centerY, 20,0,ships.wasp) 
-  
   //issue what the fuck, why is there a canvas fill here
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, canvas.width, canvas.height, 'black');
@@ -2055,9 +2238,14 @@ function init() { //this is a hard reset, this resets (almost) everything to the
 
   //debug docking station
   // spawnEnemy()
+  distributeObjects('asteroid', 20, {static: true})
+  // distributeObjects('debris', 2, {static: true})
+  // spawnEnemyShip(200,200)
 }
+//end of init()
+
+
 function generateArmorVisual() {
-  console.log('Player armor before generating the visual: ' + player.armor)
   for (let i = 0; i < player.armor; i++) {
     var s = document.createElement('div')
     s.classList.add('armor-segment')
@@ -2071,98 +2259,8 @@ let mainbase = new Base(centerX, centerY, baseRadius, 'hsl(234,50%,12%)', baseHe
 canvas.addEventListener('mousemove', function(e) {
   mouseX = e.offsetX
   mouseY = e.offsetY
-  // console.log(mouseX + ' ' + mouseY)
-  if(pressedShift) {
-    determineDodgeDirection()
-  }
 })
-function determineDodgeDirection() {
-  let distLeft = 
-  Math.hypot(
-    (player.x - player.dodgeDistance) - mouseX, 
-    player.y - mouseY) 
 
-  let distRight = 
-  Math.hypot(
-    (player.x + player.dodgeDistance) - mouseX, 
-    player.y - mouseY) 
-
-  let distUp = 
-  Math.hypot(
-    player.x - mouseX, 
-    (player.y - player.dodgeDistance) - mouseY) 
-
-  let distDown = 
-  Math.hypot(
-    player.x  - mouseX, 
-    (player.y + player.dodgeDistance) - mouseY) 
-
-  let distUpLeft = 
-  Math.hypot(
-    (player.x - (player.dodgeDistance / 1.414)) - mouseX, 
-    (player.y - (player.dodgeDistance / 1.414)) - mouseY)
-
-  let distDownLeft = 
-  Math.hypot(
-    (player.x - (player.dodgeDistance / 1.414)) - mouseX, 
-    (player.y + (player.dodgeDistance / 1.414)) - mouseY) 
-
-  let distUpRight = 
-  Math.hypot(
-    (player.x + (player.dodgeDistance / 1.414)) - mouseX, 
-    (player.y - (player.dodgeDistance / 1.414)) - mouseY)
-
-  let distDownRight = 
-  Math.hypot(
-    (player.x + (player.dodgeDistance / 1.414)) - mouseX, 
-    (player.y + (player.dodgeDistance / 1.414)) - mouseY) 
-
-   
-  let min = Math.min(
-    distLeft,
-    distRight,
-    distUp,
-    distDown,
-    distUpLeft,
-    distDownLeft,
-    distUpRight,
-    distDownRight
-    );
-
-  if(min == distLeft) {
-    dodgePreview = 'left'
-  }
-  else
-  if(min == distRight) {
-    dodgePreview = 'right'
-  }
-  else
-  if(min == distUp) {
-    dodgePreview = 'up'
-  }
-  else
-  if(min == distDown) {
-    dodgePreview = 'down'
-  }
-  else
-  if(min == distUpLeft) {
-    dodgePreview = 'upLeft'
-  }
-  else
-  if(min == distUpRight) {
-    dodgePreview = 'upRight'
-  }
-  else
-  if(min == distDownLeft) {
-    dodgePreview = 'downLeft'
-  }
-  else
-  if(min == distDownRight) {
-    dodgePreview = 'downRight'
-  }
-  else dodgePreview = null
-
-}
 canvas.addEventListener('wheel', processWheelEvents, {passive: true})
 
 function processWheelEvents(e) { //scroll event listener
@@ -2288,8 +2386,8 @@ function spawnProjectile(e) {
 
 function drawBackground() {
   ctxBg.beginPath()
-  ctxBg.rect(0,0,canvas.width,canvas.height)
   ctxBg.fillStyle = 'hsl(0,0%,3%)'
+  ctxBg.rect(camera.x,camera.y,cw,ch)
   ctxBg.fill()
   ctxBg.closePath()
 }
@@ -2306,9 +2404,7 @@ function drawCursor() {
 
 // main draw function
 function draw() {
-  drawBackground(); //minorissue doesn't actually need to be drawn more than once at this point, but this isnt causing major performance drops anyways
-  ctx.clearRect(0,0,cw,ch)
-  
+ 
   laserbeams.forEach(beam=> {
     beam.update()
   })
@@ -2337,8 +2433,12 @@ function draw() {
   particles.forEach((particle) => {
     particle.update();
   })
+  ghosts.forEach(ghost => {
+    ghost.update()
+  })
 
   player.update();
+
 
   // run some code for each player projectile
   projectiles.forEach((projectile, indexProj)=> {
@@ -2394,8 +2494,8 @@ function draw() {
       }
       
       // calculate the balance which will determine how much
-      var playerBalance = ship.weight / player.weight
-      var shipBalance =  player.weight / ship.weight  // okay still very janky code overall
+      var playerBalance = ship.mass / player.mass
+      var shipBalance =  player.mass / ship.mass  // okay still very janky code overall
       
       var min = Math.min(playerBalance,shipBalance)
       
@@ -2448,7 +2548,7 @@ function draw() {
   //debug stopped running all code for enemies, as they are not being used currently
 
   enemies.forEach((enemy, indexEnemy) => {
-    // return
+    return
     enemy.update();
 
     //automatic cleanup of enemies with radius <=1
@@ -2784,20 +2884,10 @@ function draw() {
       }
     })
   })
+
   //asteroid mechanic
 
   asteroids.forEach((asteroid, astIndex) => {
-
-    if(
-      asteroid.x > cw + asteroid.spriteDim.x || 
-      asteroid.x < 0 - asteroid.spriteDim.x  || 
-      asteroid.y > ch + +asteroid.spriteDim.y  || 
-      asteroid.y < 0 - asteroid.spriteDim.y 
-    ) {
-      setTimeout(()=>{
-        asteroids.splice(astIndex,1)
-      },0)
-    }
 
     // check for collision with other asteroids 
     //issue 
@@ -2869,14 +2959,14 @@ function draw() {
     })
 
     // check if player touching asteroid
+    /*
     let distance = Math.hypot(player.x - asteroid.x,player.y - asteroid.y)
-  
     // when player collides with asteroid
     if(
       distance < player.radius + asteroid.spriteDim.x/2 && //issue player radius is still being used to detect collision
       !dodgeDir
       ) { 
-
+        
       if(asteroid.stuckTimer > 0) {
         asteroid.stuckTimer--
       } else {
@@ -2886,7 +2976,7 @@ function draw() {
         player.stuckTimer--
       } else {
         player.stuck = true
-        if(debug) console.log('Player stuck.')
+        // if(debug) console.log('Player stuck.')
       }
 
       asteroid.stuckInside = player.id
@@ -2897,16 +2987,16 @@ function draw() {
         y: (asteroid.velocity.y + player.velocity.y),
       }
 
-      // calculate the balance which will determine how much of the velTotal will each receive based on weight of the two colliding entities
-      var playerBalance = asteroid.weight / player.weight //issue ,this is a super janky way to write this, it could be just a few lines
-      var asteroidBalance =  player.weight / asteroid.weight 
+      // calculate the balance which will determine how much of the velTotal will each receive based on mass of the two colliding entities
+      var playerBalance = asteroid.mass / player.mass //issue ,this is a super janky way to write this, it could be just a few lines
+      var asteroidBalance =  player.mass / asteroid.mass 
       
       var min = Math.min(playerBalance,asteroidBalance)
       
       playerBalance = 1 - min
       asteroidBalance = min
 
-      if(debug) console.log(playerBalance + ' ' + asteroidBalance)
+      // if(debug) console.log(playerBalance + ' ' + asteroidBalance)
 
       if(!asteroid.stuck && !player.stuck) {
 
@@ -2927,7 +3017,6 @@ function draw() {
       asteroid.velocity.y = velTotal.y/2
       player.velocity.x = velTotal.x/2
       player.velocity.y = velTotal.y/2
-      
     }
 
     // player unstuck code
@@ -2957,7 +3046,7 @@ function draw() {
       }
     }
     // ↑↑↑↑ end of player stuck code
-  
+    */
 
     // check for collision with projectiles
     projectiles.forEach((projectile)=> {
@@ -2973,7 +3062,7 @@ function draw() {
       }
     })
   })
-
+  //end of asteroid collision mechanic //deprecated?
 
   //debris mechanic
   
@@ -3094,7 +3183,7 @@ function draw() {
         debris.velocity.y = velTotal.y/2 + velTotal.y/25
 
         // basically, im giving more energy to the projectile from this collision, this implies that it is lighter than the ship
-        // by this logic i can calculate impacts differently based on the colliding objects weight or density
+        // by this logic i can calculate impacts differently based on the colliding objects mass or density
       }
     }
 
@@ -3122,33 +3211,49 @@ function draw() {
 
 
 
-  if(debug) {
-
-    ctx.save()
-    ctx.fillStyle = 'white'
-    ctx.font = '18px Arial'
-    ctx.fillText('Particles: ' + particles.length,10,80)
-    ctx.restore()
-
-  }
-
-
+  
+  
   // optimizations
-  // if(particles.length > 60) {
-  //   while(particles.length > 60) {
-  //     particles.shift()
-  //     if(debug) console.log('Removed particle.')
+  if(particles.length > 60) {
+    while(particles.length > 60) {
+      particles.shift()
+      if(debug) console.log('Removed particle.')
+    }
+  }
+  
+
+
+  //cleanup  //important //objects outside bounds or objects marked as dead are removed here
+
+  //debug, so far i have not yet defined the boundary beyond which objects like asteroids or debris disappear, therefore they are not going to be removed if off-screen
+  // asteroids.forEach((asteroid,index)=> {
+  //   if(
+  //     asteroid.x > cw + asteroid.spriteDim.x || 
+  //     asteroid.x < 0 - asteroid.spriteDim.x  || 
+  //     asteroid.y > ch + +asteroid.spriteDim.y  || 
+  //     asteroid.y < 0 - asteroid.spriteDim.y 
+  //   ) {
+  //     asteroids.splice(index,1)
+  //     objects_all.splice(objects_all.indexOf(asteroid),1)
+  //     objects_collidable.splice(objects_collidable.indexOf(asteroid),1)
   //   }
-  // }
-
-
-  //automatic cleanup //important
-
+  // })
+  // debriss.forEach((debris,index)=> {
+  //   if(
+  //     debris.x > cw + debris.spriteDim.x || 
+  //     debris.x < 0 - debris.spriteDim.x  || 
+  //     debris.y > ch + +debris.spriteDim.y  || 
+  //     debris.y < 0 - debris.spriteDim.y 
+  //   ) {
+  //     debriss.splice(index,1)
+  //     objects_all.splice(objects_all.indexOf(debris),1)
+  //     objects_collidable.splice(objects_collidable.indexOf(debris),1)
+  //   }
+  // })
 
   projectiles.forEach((p,ind)=> {
     if(p.dead == true) {
       projectiles.splice(ind,1)
-      // console.log('Automatic cleanup removed 1 projectile marked as dead.')
     }
   })
   laserbeams.forEach((beam,ind)=> {
@@ -3159,12 +3264,10 @@ function draw() {
   projectileGhosts.forEach((p,ind)=> {
     if(p.dead == true) {
       projectileGhosts.splice(ind,1)
-      // console.log('Automatic cleanup removed 1 projectile marked as dead.')
     }
   })
   explosions.forEach((explosion,ind)=> {
     if(explosion.dead) {
-      // console.log('The explosion currently removed: x: ' + explosion.x + + 'y: ' + explosion.y + ', has an index of: ' + ind )
       explosions.splice(ind,1)
     }
   })
@@ -3175,13 +3278,58 @@ function draw() {
     }
   })
 
+  ghosts.forEach((ghost,ind)=> {
+    if(ghost.alpha <= 0) {
+      ghosts.splice(ind,1)
+    }
+  })
 
 
   //draw everything here
+
+  //simple camera logic
+  if(useCamera) {
+    camera.x = player.x - cw/2
+    camera.y = player.y - ch/2
+    camera.w = cw
+    camera.h = ch
+    
+    // if(debug) console.log('Context translated to: x: ' + camera.x + ' y: ' + camera.y)
+    // if(debug) console.log('Player x: ' + player.x + ' y: ' + player.y)
+    ctx.save()
+    ctxBg.save()
+    ctx.translate(-camera.x, -camera.y)
+    ctxBg.translate(-camera.x, -camera.y)
+    
+    ctx.clearRect(camera.x,camera.y,cw,ch)
+    drawBackground()
+
+    //camera pos
+    ctx.strokeStyle = 'hsla(0,0%,100%,0.25)';
+    ctx.lineWidth = 8
+    ctx.strokeRect(camera.x,camera.y,cw,ch)
+
+    // draw rect from 0,0 to cw,ch
+    ctx.strokeStyle = 'hsla(45,100%,70%,0.25)';
+    ctx.lineWidth = 6
+    ctx.strokeRect(1,1,cw - 1,ch - 1)
+    
+  } else {
+    ctx.clearRect(0,0,cw,ch)
+    drawBackground()    
+  }
+
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'hsla(0,90%,20%,0.5)'
+  for (let i = 0; i < bgrid.gridnum; i++) {
+    for (let j = 0; j < bgrid.gridnum; j++) {
+      ctx.strokeRect(bgrid.x + i*bgrid.cellsize, bgrid.y + j*bgrid.cellsize,bgrid.cellsize,bgrid.cellsize)
+    }
+  }
+
   particles.forEach(particle => {
     particle.draw()
   })
-
   laserbeams.forEach(beam => {
     beam.draw()
   })
@@ -3212,9 +3360,20 @@ function draw() {
   })
 
   //player drawing
-  player.drawGhosts()
-  player.draw()
 
+  ghosts.forEach((ghost, index) => {
+    ghost.draw()
+  })
+  
+  if(pressedShift) {
+    player.displayDodgeRange()
+  }
+
+  player.displayDodgePreview()
+
+  player.applyMatrix()
+  player.draw()
+  player.restoreMatrix()
 
   // bullet fire anim
   if(fired) {
@@ -3228,23 +3387,17 @@ function draw() {
   explosions.forEach(explosion => {
     explosion.draw()
   })
-
-  // if(pressedShift) {
-  //   displayDodgePositions()
-  // }
-  if(pressedShift) {
-    player.displayDodgeRange()
-  }
+  
+  
   if(dodgePosVisible == true && !pressedShift) {
     windup = 0;
     dodgePosVisible = false
   }
-
-
+  
   // draw UI components
-
-
-   overlaysInfo.forEach((overlay, index) => {
+  
+  
+  overlaysInfo.forEach((overlay, index) => {
     overlay.update()
     if(overlay.dead == true) {
       overlaysInfo.splice(index,1)
@@ -3253,7 +3406,7 @@ function draw() {
   deadShipDialogs.forEach(dialog => {
     dialog.update()
   })
-
+  
   // code that lights up arrows based on player proximity
   arrows.forEach(arrow=>{
     let dist = Math.hypot(
@@ -3269,12 +3422,39 @@ function draw() {
       else {
         arrow.classList.remove('close')
       }
-      
     })
+
+
+  if(debug) {
+    ctx.save()
+    ctx.fillStyle = 'white'
+    ctx.font = '18px Arial'
+    ctx.fillText('Objects_collidable: ' + objects_collidable.length,camera.x + 10,camera.y + 70)
+    ctx.fillText('Particles: ' + particles.length,camera.x + 10,camera.y + 90)
+    ctx.restore()
+  }
+
+  // collision detection prototype
+  //update grid_pos for all collidable objects first
+  objects_collidable.forEach((obj)=>{
+    obj.grid_pos = {
+      x: Math.floor(obj.x / bgrid.cellsize),
+      y: Math.floor(obj.y / bgrid.cellsize),
+    }
+  }) 
+    
+  objects_collidable.forEach((obj)=>{
+    detectBroad(obj)
+  }) 
+    
   
 
-  // cursor, draw this last
-  // drawCursor();
+  //restore the camera position
+  if(useCamera) {
+    ctx.restore()
+    ctxBg.restore()
+  }
+
 
   drawId = requestAnimationFrame(draw)
   if(gameover) cancelAnimationFrame(drawId);
@@ -3298,7 +3478,7 @@ function initBackground() {
   ctx.fill()
   ctx.closePath();
 }
-// player.draw();
+
 initBackground()
 
 
@@ -3432,11 +3612,12 @@ function calcHypotenuse(a, b) {
   return (Math.sqrt((a * a) + (b * b)));
 }
 
-function start(useDebug) {
-  if(useDebug) {
+function start(options) {
+  if(options.debug) {
     debug = true
     setOnclickForArrowsTo(true)
   }
+  if(options.useCamera) useCamera = true
   console.log('Called start().')
   drawBackground()
   closeModal();
@@ -3691,8 +3872,6 @@ function displayDodgePositions() {
   ctx.restore()
 }
 function updateScore(arg) {
-  // console.log('Accidentally called updateScore. This is deprecated.')
-  // return
   switch (arg) {
     case 'shrink-enemy' : {
       score += 1;
@@ -3813,17 +3992,7 @@ function openMenu(menu) {
   }
   // console.log('openMenu(): Opened menu:' + ind)
 }
-function toggleInventory() {
-  console.log('should be deprecated and never used, somewhere an error exists...')
-  inventory.classList.toggle('hidden')
-  invIcon.classList.toggle('selected')
-  
-  sectorMapGUI.classList.add('hidden')
-  mapIcon.classList.remove('selected')
 
-  inventoryOpen = !inventoryOpen
-  mapOpen = false
-}
 function updateScoreVisual() {
   // if(debug) console.log('updateScoreVisual: deprecated.') 
   // return
@@ -3945,12 +4114,13 @@ function detonate() {
 
 
 class Room {
-  constructor(x,y,index,type,left,right,top,bottom) {
+  constructor(x,y,index,type,left,right,top,bottom,w = 6000, h = 4000) {
     this.x = x
     this.y = y
     this.index = index
     this.type = type
-
+    this.w = w
+    this.h = h
     // essentially if a side == portal, you can travel that direction, direction determines the x and y of the next room, left means x = x -1, y = y etc....
     this.left = left 
     this.right = right
@@ -4131,30 +4301,6 @@ function generateMap() {
   
 }
 
-// let roomCont = [
-//   {
-//     key: 'asteroids',
-//     count: 10,
-//   },
-//   {
-//     key: 'enemy-ship',
-//     count: 1,
-//   },
-//   {
-//     key: 'debris',
-//     count: 3,
-//   },
-//   {
-//     key: 'debris-field',
-//     count: 15,
-//   },
-//   {
-//     key: 'empty',
-//   },
-//   {
-//     key: 'docking-station',
-//   },
-// ]
 let roomTypes = {
   docking_station: {
     permittedContent: [
@@ -4176,7 +4322,7 @@ let roomCont = {
   asteroids: {
     count: 10,
     load() {
-      distributeAsteroids(this.count)
+      distributeObjects('asteroid', this.count)
     }
   },
   enemy_ship: {
@@ -4190,13 +4336,13 @@ let roomCont = {
     count_min: 1,
     count_max: 3,
     load() {
-      distributeDebris(this.count)
+      distributeObjects('debris',this.count)
     }
   },
   debris_field: {
     count: 15,
     load() {
-      distributeDebris(this.count)
+      distributeObjects('debris',this.count)
     }  
   },
   empty: {
@@ -4416,31 +4562,7 @@ let dialogs = {
 function loadRoom(room) {
   // this function loads all content that should be inside a room when you travel there
   console.log('Loaded room at x: ' + room.x + ' y: ' + room.y)
-  // room.contents.forEach(object => {
-  //   if(room.cleared) return
 
-  //   if(object.key == 'asteroids') {
-  //     distributeAsteroids(object.count)
-  //   }
-  //   if(object.key == 'debris') {
-  //     distributeDebris(object.count)
-  //   }
-  //   if(object.key == 'debris-field') {
-  //     distributeDebris(object.count)
-  //   }
-  //   if(object.key == 'enemy-ship') {
-  //     spawnEnemyShip(object.count)
-  //   }
-  //   if(object.key == 'docking_station') {
-  //     spawnDockingStation()
-  //   }
-  //   if(object.key == 'empty') {
-      
-  //   }
-  //   if(object.key == 'game_intro') {
-      
-  //   }
-  // })
   room.contents.forEach((content)=> {
     content.load()
   })
@@ -4491,11 +4613,9 @@ function someMethodIThinkMightBeSlow() {
   console.log(`someMethodIThinkMightBeSlow took ${duration}ms`);
 }
 
-drawBackground() //debug, this might not be here later on
+// drawBackground() //debug, this might not be here later on
 
-function spawnDebris(x,y,rotation,velocity,type) { //deprecated this is a pointless function, not providing any extra functionality 
-  debriss.push(new Debris(x,y,rotation,velocity,type))
-}
+
 
 function distributeDebris(total) {
   if(!total) var total = 3
@@ -4512,7 +4632,7 @@ function distributeDebris(total) {
       x: Math.random()*2 - 1,
       y: Math.random()*2 - 1,
     }
-    var types = ['basic','2','3']
+    var types = debrisTypes
     var rand = Math.round(Math.random()*3 - 0.5)
     if(debug) console.log('Debris type set randomly to index of: ' + rand)
     debriss.push(new Debris(x, y, rotation, velocity, types[rand]))
@@ -4521,29 +4641,332 @@ function distributeDebris(total) {
   
 }
 
-function distributeAsteroids(total) {
+function distributeObjects(type, total, options = {static: false, overlap: false}) {
   if(!total) var total = 3
-  var num = 0
-  while(num < total) {
-    var x = 
+  let index = 0
+  let dist_objects = []
+  objects_all.forEach(obj=> dist_objects.push(obj))
+  while(index < total) {
+    let x = 
     centerX + 
     (Math.random()*cw - cw/2)
 
-    var y = 
+    let y = 
     centerX + 
     (Math.random()*ch - ch/2)
 
-    var rotation = Math.random()*360
-    // var velocity = {
-    //   x: 0,
-    //   y: 0,
-    // }
-    var velocity = {
-      x: Math.random()*2 - 1,
-      y: Math.random()*2 - 1,
+    let rotation = Math.random()*360
+
+    let velocity;
+    if(options.static == true) {
+      velocity = {
+        x: 0,
+        y: 0,
+      }
+    } else {
+      velocity = {
+        x: Math.random()*2 - 1,
+        y: Math.random()*2 - 1,
+      }
     }
-    asteroids.push(new Asteroid(x, y, rotation, velocity, 'basic'))
-    num++
+
+    let currentObject;
+    
+    if(type == 'asteroid') {
+      currentObject = new Asteroid(x, y, rotation, velocity, 'basic')
+    }
+
+    if(type == 'debris') {
+      let types = debrisTypes
+      let rand = Math.round(Math.random()*3 - 0.5)
+      currentObject = new Debris(x, y, rotation, velocity, types[rand])
+    }
+    
+
+    let doesOverlap = true;
+
+    //check against the dist_objects if there is any overlap
+    if(index > 0) {
+
+      while(doesOverlap) {
+        doesOverlap = false
+        dist_objects.forEach((obj) => {
+          let dist = Math.hypot(currentObject.x - obj.x, currentObject.y - obj.y)
+          // console.log('Current object radius: ' + currentObject.radius + ' checked object radius: ' + obj.radius)
+          if(dist < currentObject.radius + obj.radius) {
+            doesOverlap = true
+          }
+          
+        })
+        if(doesOverlap) {
+          currentObject.x = Math.random()*cw
+
+          currentObject.y = Math.random()*ch
+        }
+
+      }
+    }
+
+    dist_objects.push(currentObject)
+
+    if(type == 'asteroid') {
+      asteroids.push(currentObject)
+    }
+    if(type == 'debris') {
+      debriss.push(currentObject)
+    }
+    index++
   }
+  console.log('Distributed objects + total game objects count: ' + dist_objects.length)
+}
+
+
+// collision detection code
+
+
+
+function detectBroad(target) {
+  // for each object in objects_collidable - make adjacent grid cells to look for objects whose center lays in these cells
   
+  let filtered_objects = objects_collidable.filter((obj) => 
+    obj.grid_pos.x >= target.grid_pos.x - 1 &&
+    obj.grid_pos.x <= target.grid_pos.x + 1 &&
+    obj.grid_pos.y >= target.grid_pos.y - 1 &&
+    obj.grid_pos.y <= target.grid_pos.y + 1 &&
+    objects_collidable.indexOf(target) !== objects_collidable.indexOf(obj)
+  )
+  
+  if(debug) filtered_objects.forEach(obj=> {
+      ctx.beginPath()
+      ctx.fillStyle = 'hsl(0,100%,50%)'
+      ctx.arc(obj.x,obj.y,5,0,pi*2,false)
+      ctx.fill()
+      ctx.closePath()
+  })
+
+  filtered_objects.forEach(obj=> {
+    detectCollision(obj,target)
+  })
+}
+
+
+function hitboxCollision(obj1,obj2) {
+  // if(
+  //   box2.x1 > box1.x1 && box2.x1 < box1.x2 &&
+  //   box2.x2 < box1.x2 && box2.x2 > box1.x1 &&
+  //   box2.y1 > box1.y1 && box2.y1 < box1.y2 &&
+  //   box2.y2 < box1.y2 && box2.y2 > box1.y1
+  // ) {
+  //   return true
+  // }
+  if(
+    true
+  ) {
+    return true
+  }
+}
+
+function calcBoxPosition(box) {
+  
+}
+
+function detectCollision(obj1,obj2) {
+  
+  obj1.hitbox.forEach(box1=> {
+    obj2.hitbox.forEach(box2=> {
+      if(false) { //unfinished, plop in rectIntersect and test for hitbox components overlapping
+        resolveCollision(obj1, obj2)
+      }
+      
+    })
+  })
+  
+}
+// function detectCollision(obj1,obj2) {
+//   let box_count = 0
+//   obj1.hitbox.forEach(box1=> {
+//     obj2.hitbox.forEach(box2=> {
+//       if(hitboxCollision(obj1,obj2)) { //unfinished, plop in rectIntersect and test for hitbox components overlapping
+//         // resolveCollision(obj1, obj2)
+//       if(debug) console.log('Collision detected.')
+        
+//       }
+//       box_count++
+//     })
+//   })
+//   if(debug) console.log(box_count)
+// }
+
+
+
+// Last updated November 2011
+// By Simon Sarris
+// www.simonsarris.com
+// my name @gmail.com
+//
+// Free to use and distribute at will
+// So long as you are nice to people, etc
+
+// Simple class for keeping track of the current transformation matrix
+
+// For instance:
+//    var t = new Transform();
+//    t.rotate(5);
+//    var m = t.m;
+//    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+
+// Is equivalent to:
+//    ctx.rotate(5);
+
+// But now you can retrieve it :)
+
+// Remember that this does not account for any CSS transforms applied to the canvas
+
+function Transform() {
+  this.reset();
+}
+
+Transform.prototype.reset = function() {
+  this.m = [1,0,0,1,0,0];
+};
+
+Transform.prototype.multiply = function(matrix) {
+  var m11 = this.m[0] * matrix.m[0] + this.m[2] * matrix.m[1];
+  var m12 = this.m[1] * matrix.m[0] + this.m[3] * matrix.m[1];
+
+  var m21 = this.m[0] * matrix.m[2] + this.m[2] * matrix.m[3];
+  var m22 = this.m[1] * matrix.m[2] + this.m[3] * matrix.m[3];
+
+  var dx = this.m[0] * matrix.m[4] + this.m[2] * matrix.m[5] + this.m[4];
+  var dy = this.m[1] * matrix.m[4] + this.m[3] * matrix.m[5] + this.m[5];
+
+  this.m[0] = m11;
+  this.m[1] = m12;
+  this.m[2] = m21;
+  this.m[3] = m22;
+  this.m[4] = dx;
+  this.m[5] = dy;
+};
+
+Transform.prototype.invert = function() {
+  var d = 1 / (this.m[0] * this.m[3] - this.m[1] * this.m[2]);
+  var m0 = this.m[3] * d;
+  var m1 = -this.m[1] * d;
+  var m2 = -this.m[2] * d;
+  var m3 = this.m[0] * d;
+  var m4 = d * (this.m[2] * this.m[5] - this.m[3] * this.m[4]);
+  var m5 = d * (this.m[1] * this.m[4] - this.m[0] * this.m[5]);
+  this.m[0] = m0;
+  this.m[1] = m1;
+  this.m[2] = m2;
+  this.m[3] = m3;
+  this.m[4] = m4;
+  this.m[5] = m5;
+};
+
+Transform.prototype.rotate = function(rad) {
+  var c = Math.cos(rad);
+  var s = Math.sin(rad);
+  var m11 = this.m[0] * c + this.m[2] * s;
+  var m12 = this.m[1] * c + this.m[3] * s;
+  var m21 = this.m[0] * -s + this.m[2] * c;
+  var m22 = this.m[1] * -s + this.m[3] * c;
+  this.m[0] = m11;
+  this.m[1] = m12;
+  this.m[2] = m21;
+  this.m[3] = m22;
+};
+
+Transform.prototype.translate = function(x, y) {
+  this.m[4] += this.m[0] * x + this.m[2] * y;
+  this.m[5] += this.m[1] * x + this.m[3] * y;
+};
+
+Transform.prototype.scale = function(sx, sy) {
+  this.m[0] *= sx;
+  this.m[1] *= sx;
+  this.m[2] *= sy;
+  this.m[3] *= sy;
+};
+
+Transform.prototype.transformPoint = function(px, py) {
+  var x = px;
+  var y = py;
+  px = x * this.m[0] + y * this.m[2] + this.m[4];
+  py = x * this.m[1] + y * this.m[3] + this.m[5];
+  return [px, py];
+};
+
+
+
+/**
+ * Rotates coordinate system for velocities
+ *
+ * Takes velocities and alters them as if the coordinate system they're on was rotated
+ *
+ * @param  Object | velocity | The velocity of an individual particle
+ * @param  Float  | angle    | The angle of collision between two objects in radians
+ * @return Object | The altered x and y velocities after the coordinate system has been rotated
+ */
+
+ function rotate(velocity, angle) {
+  const rotatedVelocities = {
+      x: velocity.x * Math.cos(angle) - velocity.y * Math.sin(angle),
+      y: velocity.x * Math.sin(angle) + velocity.y * Math.cos(angle)
+  };
+
+  return rotatedVelocities;
+}
+
+/**
+* Swaps out two colliding particles' x and y velocities after running through
+* an elastic collision reaction equation
+*
+* @param  Object | particle      | A particle object with x and y coordinates, plus velocity
+* @param  Object | otherParticle | A particle object with x and y coordinates, plus velocity
+* @return Null | Does not return a value
+*/
+
+function resolveCollision(obj1, obj2) {
+  const xVelocityDiff = obj1.velocity.x - obj2.velocity.x;
+  const yVelocityDiff = obj1.velocity.y - obj2.velocity.y;
+
+  const xDist = obj2.x - obj1.x;
+  const yDist = obj2.y - obj1.y;
+
+  // Prevent accidental overlap of particles - so if they're running AWAY from each other, then no transform is applied anymore, that's genious
+  if (xVelocityDiff * xDist + yVelocityDiff * yDist >= 0) {
+
+      // Grab angle between the two colliding particles
+      const angle = -Math.atan2(obj2.y - obj1.y, obj2.x - obj1.x);
+
+      // Store mass in var for better readability in collision equation
+      const m1 = obj1.mass;
+      const m2 = obj2.mass;
+
+      // Velocity before equation
+      const u1 = rotate(obj1.velocity, angle);
+      const u2 = rotate(obj2.velocity, angle);
+
+      // Velocity after 1d collision equation
+      const v1 = { 
+        x: u1.x * (m1 - m2) / (m1 + m2) + u2.x * 2 * m2 / (m1 + m2), 
+        y: u1.y 
+      };
+      const v2 = { 
+        x: u2.x * (m1 - m2) / (m1 + m2) + u1.x * 2 * m2 / (m1 + m2), 
+        y: u2.y 
+      };
+
+      // Final velocity after rotating axis back to original location
+      const vFinal1 = rotate(v1, -angle);
+      const vFinal2 = rotate(v2, -angle);
+
+      // Swap particle velocities for realistic bounce effect
+      obj1.velocity.x = vFinal1.x;
+      obj1.velocity.y = vFinal1.y;
+
+      obj2.velocity.x = vFinal2.x;
+      obj2.velocity.y = vFinal2.y;
+  }
 }

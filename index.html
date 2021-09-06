@@ -14,8 +14,10 @@
       <!-- <span>
         Start game
       </span> -->
-      <div id="button-start" class="button"  onclick='start()'>START (normal)</div>
-      <div id="button-start" class="button"  onclick='start(true)'>START (debug)</div>
+      <div id="button-start" class="button"  onclick='start({})'>START (normal)</div>
+      <div id="button-start2" class="button"  onclick='start({debug: true})'>START (debug)</div>
+      <div id="button-start3" class="button"  onclick='start({useCamera: true})'>START (useCamera)</div>
+      <div id="button-start4" class="button"  onclick='start({debug: true, useCamera: true})'>START (debug + useCamera)</div>
     </div>
     <div class="dialog game-over hidden">
       <div class="dialog-text">
@@ -28,8 +30,6 @@
       </span>
       </div>
       <!-- <br> -->
-      <div id="button-restart" class="button" onclick='start()'>RESTART</div>
-      <div id="button-start" class="button"  onclick='start(true)'>START (debug)</div>
     </div>
   </div>
   <div class="info-box left">
@@ -106,7 +106,7 @@
     <div class="ship-select gui-large">
       <h2 class="heading">SHIP SELECT</h2>
       <div class="ships-slider">
-        <div class="ship-item">
+        <!-- <div class="ship-item">
           <img src="assets/moth_default_w1920.png" alt="" data-name='moth' onclick="chooseShip(this.dataset.name)">
         </div>
         <div class="ship-item">
@@ -114,7 +114,7 @@
         </div>
         <div class="ship-item">
           <img src="assets/cargo_ship_small_w1920.png" alt=""  data-name='cargo' onclick="chooseShip(this.dataset.name)">
-        </div>
+        </div> -->
         <div class="ship-item">
           <img src="assets/dynamo_cruiser_class_II.png" alt=""  data-name='dynamo_c_cII' onclick="chooseShip(this.dataset.name)">
         </div>
@@ -137,7 +137,7 @@
     </div>
     
     <div class="ship-overview gui-large menu hidden" id="ship-overview">
-      <h2>Temp text</h2>
+      <h2>SHIP OVERVIEW</h2>
     </div>
   
   </div>
@@ -155,7 +155,6 @@
     import gsap from "/node_modules/gsap/all.js";
   </script> -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.7.1/gsap.min.js"></script>
-
   <script src="app.js"></script>
 </body>
 </html>
